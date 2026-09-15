@@ -3,7 +3,10 @@ import plugin from "./index.js";
 const calls = { llm: [], log: [] };
 let handler = null;
 
+const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.pid}`;
+
 const pluginConfig = {
+  dataDir: TEST_DIR,          // журнал и учёт теста — отдельно от боевых
   groupJid: "120363000000000000@g.us",
   telegramChatId: "123456",
   model: "test/model",
@@ -119,4 +122,5 @@ check("не осталось повторяющихся блоков", !note.inc
 pluginConfig.maxBatch = 3;
 
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);
+await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

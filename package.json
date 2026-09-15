@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "main": "index.js",
-  "description": "OpenClaw plugin: переводит ивритскую WhatsApp-группу на русский"
+  "description": "OpenClaw plugin: translates a watched chat into your language and forwards it to a destination"
 }

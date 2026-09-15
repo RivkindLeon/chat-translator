@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Подключить WhatsApp-группу к переводчику одной командой.
+ * Connect a WhatsApp group to the translator in one command.
  *
- *   node add-group.mjs <JID> "Название" [chatId] [threadId]
+ *   node add-group.mjs <JID> "Name" [chatId] [threadId]
  *
- * Прописывает группу и в настройки канала, и в маршруты плагина,
- * затем перезапускает сервис. Без chatId переводы идут туда же,
- * куда и у остальных групп.
+ * Writes the group into both the channel settings and the plugin routes,
+ * then restarts the service. Without a chatId the translations go wherever
+ * the other groups go.
  */
 
 import { readFile, writeFile, copyFile } from "node:fs/promises";
@@ -20,9 +20,9 @@ const [jid, name, chatId, threadId] = process.argv.slice(2);
 
 if (!jid || !/@g\.us$/.test(jid)) {
   console.error(`
-Укажите JID группы. Посмотреть доступные:  node groups.mjs
+Pass the group JID. To list the ones already seen:  node groups.mjs
 
-  node add-group.mjs 120363000000000000@g.us "Дом" -1001234567890
+  node add-group.mjs 120363000000000000@g.us "Building" -1001234567890
 `);
   process.exit(1);
 }
@@ -33,19 +33,19 @@ const cfg = JSON.parse(await readFile(CONFIG, "utf8"));
 const backup = `${CONFIG}.before-add-group`;
 await copyFile(CONFIG, backup);
 
-// 1) канал должен пропускать сообщения этой группы
+// 1) the channel must let this group's messages through
 cfg.channels ??= {};
 cfg.channels.whatsapp ??= {};
 cfg.channels.whatsapp.groups ??= {};
 cfg.channels.whatsapp.groups[jid] = { requireMention: false };
 
-// 2) маршрут плагина
+// 2) the plugin route
 const entry = (cfg.plugins ??= {}).entries?.["hebrew-bridge"] ?? {};
 cfg.plugins.entries ??= {};
 cfg.plugins.entries["hebrew-bridge"] = entry;
 entry.config ??= {};
 
-// переводим старый формат настроек в маршруты, если он ещё используется
+// migrate the legacy settings shape into routes if it is still in use
 if (!Array.isArray(entry.config.routes)) {
   const legacy = [
     ...(entry.config.groupJid ? [entry.config.groupJid] : []),
@@ -53,13 +53,13 @@ if (!Array.isArray(entry.config.routes)) {
   ];
   entry.config.routes = legacy.map((j, i) => ({
     jid: j,
-    name: i === 0 ? "основная" : `группа ${i + 1}`,
+    name: i === 0 ? "main" : `group ${i + 1}`,
     chatId: entry.config.telegramChatId,
   }));
 }
 
 if (entry.config.routes.some((r) => r.jid === jid)) {
-  console.log(`Группа ${jid} уже подключена — ничего не меняю.`);
+  console.log(`Group ${jid} is already connected — nothing to change.`);
   process.exit(0);
 }
 
@@ -71,19 +71,19 @@ entry.config.routes.push({
 });
 
 await writeFile(CONFIG, JSON.stringify(cfg, null, 2), "utf8");
-console.log(`Добавлено: ${name || jid}`);
-console.log(`  доставка: ${chatId ?? entry.config.telegramChatId ?? "(общая)"}${threadId ? ` · тема ${threadId}` : ""}`);
-console.log(`  резервная копия конфига: ${backup}`);
+console.log(`Added: ${name || jid}`);
+console.log(`  delivery: ${chatId ?? entry.config.telegramChatId ?? "(shared)"}${threadId ? ` · thread ${threadId}` : ""}`);
+console.log(`  config backup: ${backup}`);
 
-console.log("\nПерезапускаю сервис…");
+console.log("\nRestarting the service…");
 try {
   await run("systemctl", ["--user", "reset-failed", "openclaw-gateway"]).catch(() => {});
   await run("systemctl", ["--user", "restart", "openclaw-gateway"]);
 } catch (err) {
-  console.error(`Не удалось перезапустить: ${err?.message ?? err}`);
-  console.error(`Верните конфиг из ${backup}, если что-то пошло не так.`);
+  console.error(`Restart failed: ${err?.message ?? err}`);
+  console.error(`Restore the config from ${backup} if something went wrong.`);
   process.exit(1);
 }
 
-console.log("Готово. Проверьте через полминуты:");
+console.log("Done. Check back in half a minute:");
 console.log("  tail -3 ~/.openclaw/hebrew-bridge/logs/$(date -u +%F).log");

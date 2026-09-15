@@ -1,60 +1,63 @@
 # Hebrew Bridge
 
-Плагин [OpenClaw](https://openclaw.ai), который переводит чаты на незнакомом
-языке. Читает выбранные группы мессенджера, переводит сообщения и доставляет их
-в другой мессенджер — каждую группу в свой чат.
+An [OpenClaw](https://openclaw.ai) plugin that translates chats written in a
+language you do not read. It watches selected groups in one messenger, translates
+the messages and delivers them to another messenger — each group to its own chat.
 
-Написан для конкретной задачи: родительские чаты детского сада, домовые чаты и
-городские объявления на иврите, которые владелец не читает. Отсюда и устройство:
-он не пытается быть универсальным ботом, а делает одно дело.
+It was written for a specific problem: kindergarten parent chats, building chats
+and municipal announcements in Hebrew that the owner cannot read. Hence the shape
+of it: it does not try to be a general-purpose bot, it does one job.
 
-## Что умеет
+## What it does
 
-- **текст** — сообщения копятся пачками и переводятся одним запросом: дешевле,
-  меньше уведомлений, и модель лучше понимает, кто кому отвечает;
-- **голосовые** — расшифровываются и переводятся наравне с текстом;
-- **фотографии с текстом** — объявления, расписания, меню: текст снимается с
-  изображения и переводится с сохранением структуры;
-- **фотографии без текста** — сворачиваются в строку вида «12 фото», а не
-  занимают дюжину блоков.
+- **text** — messages pile up in batches and are translated in a single request:
+  cheaper, fewer notifications, and the model understands better who is replying
+  to whom;
+- **voice messages** — transcribed and translated just like text;
+- **photos with text** — announcements, schedules, menus: the text is lifted off
+  the image and translated with its structure intact;
+- **photos without text** — collapsed into a line like “12 photos” instead of
+  taking up a dozen blocks.
 
-## Чего не делает намеренно
+## What it deliberately does not do
 
-В читаемый мессенджер плагин **ничего не пишет** — любая попытка отправки
-отменяется. Ассистент не запускается на сообщениях читаемых групп: их видит
-только переводчик. Поэтому подброшенная в чат инструкция не может ничего
-выполнить, а токены не тратятся на чужую переписку.
+The plugin **never writes anything** back into the watched messenger — every
+attempt to send is cancelled. The assistant is not started on messages from
+watched groups: only the translator sees them. So an instruction planted in a
+chat cannot execute anything, and no tokens are spent on other people's
+conversations.
 
-## Установка
+## Install
 
 ```bash
-git clone <репозиторий> ~/projects/hebrew-bridge
+git clone <repository> ~/projects/hebrew-bridge
 cd ~/projects/hebrew-bridge
 ./deploy.sh
 ```
 
-`deploy.sh` прогоняет тесты, копирует плагин в `~/.openclaw/extensions/` и
-перезапускает шлюз.
+`deploy.sh` runs the tests, copies the plugin into `~/.openclaw/extensions/` and
+restarts the gateway.
 
-## Инструменты
+## Tools
 
 ```bash
-node tools/groups.mjs     # какие группы видел сервер, с обрывками сообщений
-node tools/add-group.mjs <JID> "Имя" <chatId>
-node tools/limits.mjs     # остаток квоты подписки
-node tools/report.mjs     # расходы за месяц
+node tools/groups.mjs     # which groups the server has seen, with message fragments
+node tools/add-group.mjs <JID> "Name" <chatId>
+node tools/limits.mjs     # remaining subscription quota
+node tools/report.mjs     # spending for the month
 ```
 
-## Документация
+## Documentation
 
-- `DOC.md` — как устроено, настройки, подключение новых групп.
+- `DOC.md` — how it works, settings, connecting new groups.
 
-## Состояние
+## Status
 
-Работает в личном хозяйстве на нескольких группах. Сейчас идёт приведение к
-виду, пригодному для чужого использования: отвязка от конкретного мессенджера
-на входе и выходе, произвольная пара языков, настройки вместо зашитых значений.
+Running in a personal setup across several groups. Work is under way to make it
+usable by other people: decoupling from a specific messenger on both the input
+and the output side, an arbitrary language pair, settings instead of hardcoded
+values.
 
-## Лицензия
+## License
 
-MIT — см. `LICENSE`.
+MIT — see `LICENSE`.

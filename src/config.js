@@ -4,10 +4,12 @@ export const DEFAULTS = {
   maxWaitMs: 120_000,
   maxBatch: 15,
   contextSize: 10,
-  model: "openrouter/google/gemini-3.7-flash",
 };
 
-/** Один маршрут — одна группа со своим буфером, контекстом, словарём и адресом доставки. */
+/**
+ * One route is one conversation with its own buffer, context, glossary and
+ * delivery address, so that separate chats never bleed into each other.
+ */
 export function resolveRoutes(cfg) {
   if (Array.isArray(cfg.routes) && cfg.routes.length > 0) {
     return cfg.routes
@@ -17,7 +19,7 @@ export function resolveRoutes(cfg) {
         source: r.source ?? cfg.source ?? "whatsapp",
         delivery: r.delivery ?? cfg.delivery ?? "telegram",
         model: r.model ?? cfg.routeModel,
-        name: r.name ?? `группа ${i + 1}`,
+        name: r.name ?? `conversation ${i + 1}`,
         chatId: r.chatId ?? cfg.telegramChatId,
         threadId: r.threadId,
         targetLanguage: r.targetLanguage ?? cfg.targetLanguage ?? DEFAULTS.targetLanguage,
@@ -34,7 +36,8 @@ export function resolveRoutes(cfg) {
         contextSize: r.contextSize ?? cfg.contextSize ?? DEFAULTS.contextSize,
       }));
   }
-  // старый формат конфига: одна группа плюс список дополнительных
+
+  // older settings shape: one conversation plus a list of extra ones
   const legacy = [
     ...(cfg.groupJid ? [cfg.groupJid] : []),
     ...(Array.isArray(cfg.groupJids) ? cfg.groupJids : []),
@@ -43,7 +46,7 @@ export function resolveRoutes(cfg) {
     jid,
     source: cfg.source ?? "whatsapp",
     delivery: cfg.delivery ?? "telegram",
-    name: i === 0 ? "основная группа" : `группа ${i + 1}`,
+    name: i === 0 ? "main conversation" : `conversation ${i + 1}`,
     chatId: cfg.telegramChatId,
     threadId: undefined,
     targetLanguage: cfg.targetLanguage ?? DEFAULTS.targetLanguage,

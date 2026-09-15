@@ -1,12 +1,12 @@
 const TELEGRAM_LIMIT = 4096;
 
-/** Мягко режет длинный текст по границам строк под лимит мессенджера. */
+/** Splits long text on line boundaries so it fits the recipient's limit. */
 export function splitForDelivery(text, limit = TELEGRAM_LIMIT) {
   if (text.length <= limit) return [text];
   const parts = [];
   let current = "";
   for (const line of text.split("\n")) {
-    // одна строка длиннее лимита — режем жёстко
+    // a single line longer than the limit has to be cut mid-way
     if (line.length > limit) {
       if (current) { parts.push(current); current = ""; }
       for (let i = 0; i < line.length; i += limit) parts.push(line.slice(i, i + limit));
@@ -24,11 +24,11 @@ export function splitForDelivery(text, limit = TELEGRAM_LIMIT) {
 }
 
 /**
- * Время сообщения в заголовке.
+ * Message time for the header line.
  *
- * Часовой пояс и формат берутся из настроек: сервер может стоять где угодно,
- * а читать переводы будут там, где живут участники чата. По умолчанию —
- * круглосуточный формат и часовой пояс машины.
+ * Time zone and format come from settings: the server may stand anywhere, while
+ * translations are read where the chat participants live. Defaults to the
+ * machine's own zone and a 24-hour clock.
  */
 export function formatClock(timestamp, opts = {}) {
   const ms = typeof timestamp === "number"
@@ -42,14 +42,14 @@ export function formatClock(timestamp, opts = {}) {
       ...(opts.timeZone ? { timeZone: opts.timeZone } : {}),
     });
   } catch {
-    // неверный часовой пояс или язык не должны ронять перевод
+    // a bad time zone or locale must not break the translation
     return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   }
 }
 
-/** Человеческое имя отправителя: как его показал мессенджер → словарь → хвост адреса. */
+/** Human name of the sender: what the messenger showed → glossary → tail of the address. */
 export function resolveSenderLabel(msg, glossary) {
-  const raw = msg.senderName ?? msg.senderId ?? "неизвестный";
+  const raw = msg.senderName ?? msg.senderId ?? "unknown";
   const bare = String(raw).split("@")[0].split(":")[0];
   return glossary?.[bare] ?? glossary?.[String(raw)] ?? bare;
 }

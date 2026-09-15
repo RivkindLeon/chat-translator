@@ -11,13 +11,13 @@ const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.p
 const MAIN_JID = "120363000000000000@g.us";
 
 const pluginConfig = {
-  dataDir: TEST_DIR,          // журнал и учёт теста — отдельно от боевых
+  dataDir: TEST_DIR,          // test journal and accounting — kept away from the live ones
   routes: [
     {
       jid: MAIN_JID,
-      name: "Основная",
+      name: "Main",
       chatId: "123456",
-      glossary: { "972500000001": "Эйтан", "972500000002": "Мири" },
+      glossary: { "972500000001": "Eitan", "972500000002": "Miri" },
     },
   ],
   debounceMs: 120,
@@ -45,7 +45,7 @@ const api = {
     modelAuth: { getApiKeyForModel: async (p) => { calls.auth.push(p); return { apiKey: "test-key", mode: "api-key" }; } },
     llm: { complete: async (p) => {
       calls.llm.push(p);
-      return { text: "[перевод пачки]", model: p.model, usage: { inputTokens: 100, outputTokens: 50 } };
+      return { text: "[batch translation]", model: p.model, usage: { inputTokens: 100, outputTokens: 50 } };
     }},
   },
 };
@@ -76,218 +76,218 @@ const wait = (ms) => new Promise(r => setTimeout(r, ms));
 let failures = 0;
 const check = (name, cond) => { console.log(`${cond ? "  ok  " : " FAIL "} ${name}`); if (!cond) failures++; };
 
-console.log("\n— фильтры —");
-await handler({ content: "чужой канал" }, { channelId: "telegram", conversationId: pluginConfig.groupJid });
-await wa("чужая группа", { jid: "999@g.us" });
+console.log("\n— filters —");
+await handler({ content: "other channel" }, { channelId: "telegram", conversationId: pluginConfig.groupJid });
+await wa("other group", { jid: "999@g.us" });
 await wa("", {});
-await wa("своё", { metadata: { fromMe: true } });
+await wa("own message", { metadata: { fromMe: true } });
 await wait(250);
-check("посторонние сообщения не вызвали модель", calls.llm.length === 0);
+check("unrelated messages never reached the model", calls.llm.length === 0);
 
-console.log("\n— дедупликация —");
+console.log("\n— deduplication —");
 await wa("שלום", { id: "dup-1" });
 await wa("שלום", { id: "dup-1" });
 await wait(250);
-check("дубль по messageId отброшен", calls.llm.length === 1);
+check("duplicate messageId dropped", calls.llm.length === 1);
 const firstPrompt = calls.llm[0].messages[0].content;
-check("в промпте одно сообщение", (firstPrompt.match(/שלום/g) || []).length === 1);
+check("prompt carries the message once", (firstPrompt.match(/שלום/g) || []).length === 1);
 
-console.log("\n— дебаунс собирает пачку —");
+console.log("\n— debounce collects a batch —");
 calls.llm.length = 0;
-await wa("раз", { id: "a" }); await wait(30);
-await wa("два-от-Мири", { id: "b", sender: "972500000002@s.whatsapp.net" });
-check("до паузы модель не вызвана", calls.llm.length === 0);
+await wa("one", { id: "a" }); await wait(30);
+await wa("two-from-Miri", { id: "b", sender: "972500000002@s.whatsapp.net" });
+check("model not called before the pause", calls.llm.length === 0);
 await wait(250);
-check("после паузы ровно один вызов", calls.llm.length === 1);
+check("exactly one call after the pause", calls.llm.length === 1);
 
-console.log("\n— контекст и глоссарий —");
+console.log("\n— context and glossary —");
 const p2 = calls.llm[0].messages[0].content;
-check("предыдущая пачка попала в контекст", p2.includes("КОНТЕКСТ"));
-check("имя из глоссария подставлено", p2.includes("Эйтан"));
-check("второй участник распознан", p2.includes("Мири"));
-check("системный промпт содержит правила", calls.llm[0].systemPrompt.includes("RULES"));
-check("язык перевода подставлен", calls.llm[0].systemPrompt.includes(pluginConfig.targetLanguage ?? "Russian"));
-check("модель не навязывается плагином", calls.llm[0].model === undefined);
+check("previous batch carried into the context", p2.includes("CONTEXT"));
+check("glossary name substituted", p2.includes("Eitan"));
+check("second participant recognised", p2.includes("Miri"));
+check("system prompt carries the rules", calls.llm[0].systemPrompt.includes("RULES"));
+check("target language substituted", calls.llm[0].systemPrompt.includes(pluginConfig.targetLanguage ?? "Russian"));
+check("plugin does not force a model", calls.llm[0].model === undefined);
 
-console.log("\n— maxBatch режет пачку —");
+console.log("\n— maxBatch caps the batch —");
 calls.llm.length = 0;
 for (const i of [1,2,3,4,5]) await wa(`msg${i}`, { id: `m${i}` });
 await wait(400);
-const payloadOf = (c) => c.messages[0].content.split("ПЕРЕВЕДИ ЭТИ СООБЩЕНИЯ")[1] ?? "";
+const payloadOf = (c) => c.messages[0].content.split("TRANSLATE THESE MESSAGES")[1] ?? "";
 const sizes = calls.llm.map(c => (payloadOf(c).match(/msg\d/g) || []).length);
-check(`пачки не больше maxBatch=3 (получили ${JSON.stringify(sizes)})`, sizes.every(s => s <= 3));
-check("все 5 сообщений переведены", sizes.reduce((a,b)=>a+b,0) === 5);
+check(`no batch exceeds maxBatch=3 (got ${JSON.stringify(sizes)})`, sizes.every(s => s <= 3));
+check("all 5 messages translated", sizes.reduce((a,b)=>a+b,0) === 5);
 
-console.log("\n— ошибка модели не теряет сообщения —");
+console.log("\n— a model error must not lose messages —");
 calls.llm.length = 0;
 let boom = true;
 api.runtime.llm.complete = async (p) => {
   calls.llm.push(p);
   if (boom) { boom = false; throw new Error("503 upstream"); }
-  return { text: "ок", model: p.model, usage: {} };
+  return { text: "ok", model: p.model, usage: {} };
 };
-await wa("важное", { id: "keep-1" });
+await wa("important", { id: "keep-1" });
 await wait(500);
-const retried = calls.llm.some(c => c.messages[0].content.includes("важное"));
-check("сообщение переотправлено после сбоя", calls.llm.length >= 2 && retried);
-check("ошибка залогирована", calls.log.some(([lvl, m]) => lvl === "error" && String(m).includes("503")));
+const retried = calls.llm.some(c => c.messages[0].content.includes("important"));
+check("message resent after the failure", calls.llm.length >= 2 && retried);
+check("failure logged", calls.log.some(([lvl, m]) => lvl === "error" && String(m).includes("503")));
 
-console.log("\n— пачка фотографий не раздувает сообщение —");
+console.log("\n— a burst of photos must not bloat the message —");
 calls.llm.length = 0; calls.log.length = 0;
-pluginConfig.maxBatch = 20;              // 12 фото должны попасть в одну пачку
-pluginConfig.labelsPlural = { image: { icon: "📷", word: "фото" } };   // подписи задаёт пользователь
+pluginConfig.maxBatch = 20;              // all 12 photos must land in one batch
+pluginConfig.labelsPlural = { image: { icon: "📷", word: "snapshots" } };   // captions come from the user
 for (let i = 0; i < 12; i += 1) {
   await wa("<media:image>", { id: `flood-${i}` });
 }
 await wait(400);
 const note = calls.log.map(([, m]) => String(m)).join(" | ");
-check("двенадцать фото свернулись в одну строку", note.includes("12 фото"));
-check("не осталось повторяющихся блоков", !note.includes("📷 image"));
-check("подпись взята из настроек, а не зашита", note.includes("фото") && !note.includes("photos"));
+check("twelve photos collapsed into one line", note.includes("12 snapshots"));
+check("no repeated blocks left", !note.includes("📷 image"));
+check("caption comes from config, not hardcoded", note.includes("snapshots") && !note.includes("photos"));
 pluginConfig.maxBatch = 3;
 
-console.log("\n— время берётся из настроек —");
+console.log("\n— time comes from the settings —");
 {
   const { formatClock } = await import("./src/format.js");
   const t0 = 1788086845;
-  check("часовой пояс применяется", formatClock(t0, { timeZone: "Asia/Jerusalem" }) !== formatClock(t0, { timeZone: "America/New_York" }));
-  check("формат применяется", formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("AM") || formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("PM"));
-  check("неверный пояс не роняет перевод", /^\d{2}:\d{2}$/.test(formatClock(t0, { timeZone: "Нет/Такого" })));
+  check("time zone is applied", formatClock(t0, { timeZone: "Asia/Jerusalem" }) !== formatClock(t0, { timeZone: "America/New_York" }));
+  check("locale format is applied", formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("AM") || formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("PM"));
+  check("a bogus time zone does not break translation", /^\d{2}:\d{2}$/.test(formatClock(t0, { timeZone: "No/Such" })));
 }
 
-console.log("\n— реестр бесед —");
+console.log("\n— conversation registry —");
 {
   const { mergeObservations } = await import("./src/registry.js");
   const first = mergeObservations({}, [
-    { conversationId: "a@g.us", count: 3, lastSeen: "2026-09-01T10:00:00Z", samples: ["привет"] },
+    { conversationId: "a@g.us", count: 3, lastSeen: "2026-09-01T10:00:00Z", samples: ["hello"] },
   ], { source: "whatsapp" });
-  check("новая беседа попала в реестр", first["a@g.us"]?.count === 3);
+  check("new conversation recorded", first["a@g.us"]?.count === 3);
 
   const later = mergeObservations(first, [
-    { conversationId: "a@g.us", count: 1, lastSeen: "2026-09-10T10:00:00Z", samples: ["ещё"] },
+    { conversationId: "a@g.us", count: 1, lastSeen: "2026-09-10T10:00:00Z", samples: ["more"] },
   ], { source: "whatsapp" });
-  check("старые образцы не потерялись", later["a@g.us"].samples.includes("привет") && later["a@g.us"].samples.includes("ещё"));
-  check("счётчик не уменьшился при коротком журнале", later["a@g.us"].count === 3);
-  check("дата последнего сообщения обновилась", later["a@g.us"].lastSeen.startsWith("2026-09-10"));
-  check("первая встреча запомнена", later["a@g.us"].firstSeen.startsWith("2026-09-01"));
+  check("old samples kept", later["a@g.us"].samples.includes("hello") && later["a@g.us"].samples.includes("more"));
+  check("counter did not shrink on a short log", later["a@g.us"].count === 3);
+  check("last-seen date updated", later["a@g.us"].lastSeen.startsWith("2026-09-10"));
+  check("first-seen date remembered", later["a@g.us"].firstSeen.startsWith("2026-09-01"));
 }
 
-console.log("\n— своя модель на маршрут —");
+console.log("\n— per-route model —");
 {
   const { completeForRoute } = await import("./src/models/index.js");
 
   calls.llm.length = 0;
-  await completeForRoute({ route: { name: "без модели" }, api, systemPrompt: "s", messages: [] });
-  check("без указания модели идём через OpenClaw", calls.llm.length === 1);
+  await completeForRoute({ route: { name: "no model" }, api, systemPrompt: "s", messages: [] });
+  check("without a model we go through OpenClaw", calls.llm.length === 1);
 
   calls.auth.length = 0;
   const sent = [];
   const origFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
     sent.push({ url, body: JSON.parse(init.body) });
-    return { ok: true, json: async () => ({ choices: [{ message: { content: "перевод" } }], model: "m", usage: { prompt_tokens: 10, completion_tokens: 5 } }) };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: "translated" } }], model: "m", usage: { prompt_tokens: 10, completion_tokens: 5 } }) };
   };
   const res = await completeForRoute({
-    route: { name: "со своей", model: "openrouter/some/model" },
+    route: { name: "own model", model: "openrouter/some/model" },
     api, systemPrompt: "s", messages: [{ role: "user", content: "x" }],
   });
   globalThis.fetch = origFetch;
 
-  check("доступ запрошен у OpenClaw, а не хранится у нас", calls.auth[0]?.model?.provider === "openrouter");
-  check("модель передана без имени провайдера", sent[0]?.body?.model === "some/model");
-  check("перевод получен напрямую", res.text === "перевод");
-  check("расход посчитан", res.usage.inputTokens === 10 && res.usage.outputTokens === 5);
+  check("credentials asked from OpenClaw, never stored here", calls.auth[0]?.model?.provider === "openrouter");
+  check("model sent without the provider prefix", sent[0]?.body?.model === "some/model");
+  check("translation received directly", res.text === "translated");
+  check("usage accounted", res.usage.inputTokens === 10 && res.usage.outputTokens === 5);
 
   let failed;
   try {
-    await completeForRoute({ route: { name: "кривая", model: "неизвестный/модель" }, api, messages: [] });
+    await completeForRoute({ route: { name: "broken", model: "nosuch/model" }, api, messages: [] });
   } catch (err) { failed = err; }
-  check("неизвестный провайдер даёт понятную ошибку", /обращаться не умеет/.test(String(failed?.message)));
+  check("unknown provider yields a clear error", /cannot call provider/.test(String(failed?.message)));
 }
 
-console.log("\n— у каждой группы свой мир —");
+console.log("\n— every chat gets its own world —");
 {
   const second = "120363222222222222@g.us";
-  pluginConfig.routes.push({ jid: second, name: "Вторая", chatId: "999" });
+  pluginConfig.routes.push({ jid: second, name: "Second", chatId: "999" });
   pluginConfig.dryRun = false;
   const sent = [];
   const origFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true, text: async () => "" }; };
 
   calls.llm.length = 0;
-  await wa("сообщение первой", { id: "iso-1" });
-  await wa("сообщение второй", { id: "iso-2", jid: second });
+  await wa("message for the first", { id: "iso-1" });
+  await wa("message for the second", { id: "iso-2", jid: second });
   await wait(400);
 
-  check("две группы — два отдельных вызова модели", calls.llm.length === 2);
-  const a = calls.llm.find((c) => c.messages[0].content.includes("первой"));
-  const b = calls.llm.find((c) => c.messages[0].content.includes("второй"));
-  check("сообщения групп не смешались в одной пачке", Boolean(a && b) && a !== b);
-  check("словарь применился только к своей группе", a.systemPrompt.includes("Эйтан") && !b.systemPrompt.includes("Эйтан"));
+  check("two chats — two separate model calls", calls.llm.length === 2);
+  const a = calls.llm.find((c) => c.messages[0].content.includes("the first"));
+  const b = calls.llm.find((c) => c.messages[0].content.includes("the second"));
+  check("chats never mixed into one batch", Boolean(a && b) && a !== b);
+  check("glossary applied only to its own chat", a.systemPrompt.includes("Eitan") && !b.systemPrompt.includes("Eitan"));
   const chats = sent.map((s) => String(s.chat_id));
-  check(`каждая группа ушла в свой чат (${chats.join(", ")})`, chats.includes("123456") && chats.includes("999"));
+  check(`each chat went to its own destination (${chats.join(", ")})`, chats.includes("123456") && chats.includes("999"));
 
   globalThis.fetch = origFetch;
   pluginConfig.dryRun = true;
   pluginConfig.routes.pop();
 }
 
-console.log("\n— в читаемый мессенджер ничего не пишем —");
+console.log("\n— we never write back into the watched messenger —");
 {
   const out = (target, channel = "whatsapp") =>
-    handlers["message_sending"]({ to: target, content: "ответ ассистента" }, { channelId: channel, conversationId: target });
-  check("ответ в читаемую группу отменён", (await out(MAIN_JID))?.cancel === true);
-  check("личный чат тоже закрыт", (await out("972500000009@s.whatsapp.net"))?.cancel === true);
-  check("посторонняя группа закрыта", (await out("120363999999999999@g.us"))?.cancel === true);
-  check("доставка переводов не затронута", !(await out("-100123", "telegram"))?.cancel);
+    handlers["message_sending"]({ to: target, content: "assistant reply" }, { channelId: channel, conversationId: target });
+  check("reply into the watched group cancelled", (await out(MAIN_JID))?.cancel === true);
+  check("direct chats blocked too", (await out("972500000009@s.whatsapp.net"))?.cancel === true);
+  check("unrelated groups blocked", (await out("120363999999999999@g.us"))?.cancel === true);
+  check("translation delivery untouched", !(await out("-100123", "telegram"))?.cancel);
 }
 
-console.log("\n— ассистент не запускается на читаемых сообщениях —");
+console.log("\n— the assistant never runs on watched messages —");
 {
   const dispatch = (key) => handlers["before_dispatch"]({ sessionKey: key, content: "x" }, { sessionKey: key });
-  await wa("шалом", { id: "agent-1", sessionKey: "wa:watched" });
-  check("на читаемой беседе запуск подавлен", (await dispatch("wa:watched"))?.handled === true);
-  check("чужие беседы не трогаем", !(await dispatch("wa:someone-else"))?.handled);
+  await wa("shalom", { id: "agent-1", sessionKey: "wa:watched" });
+  check("dispatch suppressed on a watched conversation", (await dispatch("wa:watched"))?.handled === true);
+  check("other conversations left alone", !(await dispatch("wa:someone-else"))?.handled);
   await wait(300);
 }
 
-console.log("\n— голосовые и картинки —");
+console.log("\n— voice messages and images —");
 {
   calls.llm.length = 0; calls.stt.length = 0; calls.img.length = 0;
   sttReply = "שלום, נתראה מחר";
   await wa("<media:audio>", { id: "v-1", mediaPath: "/tmp/a.ogg", mime: "audio/ogg" });
   await wait(350);
-  check("голосовое отправлено на расшифровку", calls.stt.length === 1);
-  check("путь к файлу передан", calls.stt[0]?.filePath === "/tmp/a.ogg");
+  check("voice message sent for transcription", calls.stt.length === 1);
+  check("file path passed through", calls.stt[0]?.filePath === "/tmp/a.ogg");
   const voiced = calls.llm[0]?.messages[0].content ?? "";
-  check("расшифровка ушла в перевод", voiced.includes("נתראה מחר"));
-  check("помечено как голосовое", voiced.includes("🎤"));
+  check("transcript went into the translation", voiced.includes("נתראה מחר"));
+  check("marked as a voice message", voiced.includes("🎤"));
 
   calls.llm.length = 0; calls.img.length = 0;
   imgReply = "הודעה חשובה להורים";
   await wa("<media:image>", { id: "i-1", mediaPath: "/tmp/x.jpg", mime: "image/jpeg" });
   await wait(350);
-  check("картинка отправлена на чтение", calls.img.length === 1);
-  check("текст с картинки ушёл в перевод", (calls.llm[0]?.messages[0].content ?? "").includes("הודעה חשובה"));
+  check("image sent for reading", calls.img.length === 1);
+  check("text from the image went into the translation", (calls.llm[0]?.messages[0].content ?? "").includes("הודעה חשובה"));
 
   calls.llm.length = 0;
   imgReply = "NO_TEXT";
   await wa("<media:image>", { id: "i-2", mediaPath: "/tmp/kids.jpg" });
   await wait(350);
-  check("фото без текста не идёт в модель", calls.llm.length === 0);
+  check("a textless photo never reaches the model", calls.llm.length === 0);
 
   calls.llm.length = 0;
   const brokenStt = api.runtime.stt.transcribeAudioFile;
-  api.runtime.stt.transcribeAudioFile = async () => { throw new Error("stt недоступен"); };
+  api.runtime.stt.transcribeAudioFile = async () => { throw new Error("stt unavailable"); };
   await wa("<media:audio>", { id: "v-2", mediaPath: "/tmp/b.ogg" });
   await wait(350);
-  check("сбой распознавания не теряет сообщение", calls.log.some(([, m]) => String(m).includes("голосов")));
-  check("причина сбоя записана", calls.log.some(([lvl, m]) => lvl === "warn" && String(m).includes("stt недоступен")));
+  check("a transcription failure does not lose the message", calls.log.some(([, m]) => String(m).includes("voice message")));
+  check("failure reason recorded", calls.log.some(([lvl, m]) => lvl === "warn" && String(m).includes("stt unavailable")));
   api.runtime.stt.transcribeAudioFile = brokenStt;
   sttReply = "";
 }
 
-console.log("\n— сбой сети не теряет перевод и не переводит заново —");
+console.log("\n— a network failure loses nothing and never re-translates —");
 {
   pluginConfig.dryRun = false;
   calls.llm.length = 0;
@@ -301,12 +301,12 @@ console.log("\n— сбой сети не теряет перевод и не п
   };
   await wa("סבבה", { id: "net-1" });
   await wait(6500);
-  check("перевод запрошен один раз, несмотря на сбои", calls.llm.length === 1);
-  check("сообщение всё-таки доставлено", delivered.length === 1);
+  check("translation requested once despite the failures", calls.llm.length === 1);
+  check("message delivered in the end", delivered.length === 1);
   globalThis.fetch = origFetch;
   pluginConfig.dryRun = true;
 }
 
-console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);
+console.log(failures === 0 ? "\nall checks passed\n" : `\nfailed checks: ${failures}\n`);
 await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

@@ -4,22 +4,23 @@ import { join } from "node:path";
 import { extractMediaFile } from "../media.js";
 
 /**
- * Источник «WhatsApp».
+ * The WhatsApp source.
  *
- * Знает три вещи, которых не должен знать остальной плагин: как подписаться на
- * входящие этого канала, как выглядят его вложения и как запретить запись в него.
+ * Holds the three things the rest of the plugin should not know: how to
+ * subscribe to this channel's incoming messages, what its attachments look
+ * like, and how to forbid writing into it.
  */
 export default {
   id: "whatsapp",
   channelId: "whatsapp",
 
   /**
-   * Подписывается на входящие и отдаёт их в нормализованном виде.
+   * Subscribes to incoming messages and hands them over in a normalised shape.
    *
-   * @param api        объект плагина OpenClaw
-   * @param isWatched  (conversationId) => boolean — читаем ли эту беседу
-   * @param onMessage  (msg) => void — нормализованное сообщение
-   * @param log,journal,debug — вывод
+   * @param api        the OpenClaw plugin object
+   * @param isWatched  (conversationId) => boolean — do we read this conversation
+   * @param onMessage  (msg) => void — a normalised message
+   * @param log,journal,debug — output
    */
   attach({ api, isWatched, onMessage, log, journal, debug }) {
     api.on("message_received", async (event, ctx) => {
@@ -35,13 +36,13 @@ export default {
         const conversationId = ctx.conversationId ?? event.from ?? "";
         if (!isWatched(conversationId)) return;
 
-        // свои же сообщения переводить незачем
+        // no point translating our own messages
         if (event.metadata?.fromMe === true) return;
 
         const text = (event.content ?? "").trim();
         if (!text) return;
 
-        // канал подставляет заглушку вида <media:image> вместо содержимого
+        // the channel substitutes a placeholder like <media:image> for the payload
         const media = /^<media:([a-z]+)>$/i.exec(text);
         const attachment = media ? extractMediaFile(event) : {};
 
@@ -61,18 +62,19 @@ export default {
             : { kind: "text", text }),
         });
       } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой в обработчике: ${err?.message ?? err}`);
-        void journal("error", `сбой в обработчике: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] handler failed: ${err?.message ?? err}`);
+        void journal("error", `handler failed: ${err?.message ?? err}`);
       }
     });
   },
 
   /**
-   * Защита: мы отсюда только читаем.
+   * Guard rails: we only ever read from here.
    *
-   * Плагин отменяет любое исходящее в этот канал и не даёт ассистенту
-   * запускаться на сообщениях читаемых бесед — иначе он отвечает незнакомым
-   * людям от имени владельца номера и тратит токены на чужую переписку.
+   * The plugin cancels every outgoing message to this channel and keeps the
+   * assistant from running on watched conversations — otherwise it answers
+   * strangers on behalf of the number's owner and spends tokens on other
+   * people's chatter.
    */
   guard({ api, isWatchedSession, muteOutbound, blockAgent, log, journal }) {
     api.on("before_dispatch", async (event, ctx) => {
@@ -80,11 +82,11 @@ export default {
         if (!blockAgent()) return;
         const key = event?.sessionKey ?? ctx?.sessionKey;
         if (!key || !isWatchedSession(key)) return;
-        log.info?.("[hebrew-bridge] запуск агента подавлен для наблюдаемой сессии");
+        log.info?.("[hebrew-bridge] agent run suppressed for a watched conversation");
         return { handled: true };
       } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой блокировки агента: ${err?.message ?? err}`);
-        void journal("error", `сбой блокировки агента: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] agent guard failed: ${err?.message ?? err}`);
+        void journal("error", `agent guard failed: ${err?.message ?? err}`);
       }
     });
 
@@ -92,24 +94,25 @@ export default {
       try {
         if (ctx.channelId !== "whatsapp") return;
         if (!muteOutbound()) return;
-        const target = ctx.conversationId ?? event.to ?? "(неизвестно)";
+        const target = ctx.conversationId ?? event.to ?? "(unknown)";
         const preview = String(event.content ?? "").slice(0, 80).replace(/\s+/g, " ");
-        log.info?.(`[hebrew-bridge] исходящее в WhatsApp отменено: ${target}`);
-        void journal("warn", `отменено исходящее в WhatsApp → ${target}: "${preview}"`);
-        return { cancel: true, cancelReason: "hebrew-bridge: только чтение" };
+        log.info?.(`[hebrew-bridge] outgoing WhatsApp message cancelled: ${target}`);
+        void journal("warn", `cancelled outgoing WhatsApp message → ${target}: "${preview}"`);
+        return { cancel: true, cancelReason: "hebrew-bridge: read-only" };
       } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой глушилки: ${err?.message ?? err}`);
-        void journal("error", `сбой глушилки: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] outbound guard failed: ${err?.message ?? err}`);
+        void journal("error", `outbound guard failed: ${err?.message ?? err}`);
       }
     });
   },
 
   /**
-   * Находит беседы этого мессенджера в журнале шлюза.
+   * Finds this messenger's conversations in the gateway log.
    *
-   * Нужно, чтобы вообще узнать, какие группы существуют: названий мессенджер
-   * не сообщает, а события неподключённых бесед до плагина не доходят. Журнал
-   * шлюза живёт пару суток, поэтому увиденное складывается в свой реестр.
+   * This is the only way to learn which groups exist at all: the messenger
+   * reports no names, and events from unconnected conversations never reach
+   * the plugin. The gateway log lives a couple of days, so what is seen is
+   * copied into our own registry.
    */
   async discover({ logDir = "/tmp/openclaw", maxFiles = 3 } = {}) {
     let files = [];
@@ -147,9 +150,9 @@ export default {
         const at = row?.time ?? "";
         if (at > seen.lastSeen) seen.lastSeen = at;
 
-        // обрывок нужен только чтобы человек узнал свою группу
+        // the snippet only exists so a human can recognise their own group
         let body = String(info?.body ?? "").replace(/\s+/g, " ").trim();
-        // служебные обёртки шлюза опознанию не помогают
+        // the gateway's own wrappers are no help in recognising anything
         if (/^\[[A-Za-z]+\s/.test(body)) body = "";
         const media = /^<media:(\w+)>$/.exec(body);
         if (media) body = `(${media[1]})`;

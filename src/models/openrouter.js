@@ -1,16 +1,16 @@
 /**
- * Прямой вызов модели через OpenRouter.
+ * Calling a model through OpenRouter directly.
  *
- * Нужен, чтобы маршрут мог выбрать себе модель: перевод и рассуждающий
- * ассистент — разная работа, и навязывать им общую модель неправильно.
- * Доступ берётся у самого OpenClaw, своей копии ключа плагин не держит.
+ * This exists so a route can pick its own model: translation and a reasoning
+ * assistant are different jobs, and forcing one model on both is wrong.
+ * Credentials come from OpenClaw itself — the plugin keeps no copy of the key.
  */
 export default {
   id: "openrouter",
   endpoint: "https://openrouter.ai/api/v1/chat/completions",
 
   async complete({ auth, model, systemPrompt, messages, maxTokens, temperature, timeoutMs = 120_000 }) {
-    if (!auth?.apiKey) throw new Error("не удалось получить доступ к OpenRouter");
+    if (!auth?.apiKey) throw new Error("could not obtain OpenRouter credentials");
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -35,8 +35,8 @@ export default {
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        const err = new Error(`OpenRouter ответил ${res.status}: ${body.slice(0, 200)}`);
-        // 5xx и 429 имеет смысл повторить, остальное — наша вина
+        const err = new Error(`OpenRouter replied ${res.status}: ${body.slice(0, 200)}`);
+        // 5xx and 429 are worth retrying; anything else is our own fault
         if (res.status >= 500 || res.status === 429) err.retriable = true;
         throw err;
       }

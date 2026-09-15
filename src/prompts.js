@@ -1,18 +1,17 @@
 /**
- * Подсказки модели.
+ * Prompts for the model.
  *
- * Написаны по-английски намеренно: модели следуют англоязычным инструкциям
- * заметнее точнее, а язык перевода подставляется параметром — плагин не должен
- * быть привязан к одной паре языков.
+ * Written in English on purpose: models follow English instructions more
+ * closely, and the languages are parameters — the plugin should not be tied to
+ * one pair of them.
  */
 
 /**
- * Снятие текста с изображения.
+ * Reading text off an image.
  *
- * Главная сложность — таблицы. Расписание или меню, разложенное по строкам
- * исходной таблицы, превращается в нечитаемую кашу: «все завтраки недели,
- * потом все обеды». Поэтому группировка по дням оговаривается отдельно и
- * показывается примером.
+ * Tables are the hard part. A timetable or menu laid out row by row turns into
+ * an unreadable mess — "every breakfast of the week, then every lunch" — so
+ * grouping by day is spelled out separately and shown by example.
  */
 export function buildImageTextPrompt(route = {}) {
   const unreadable = route.unreadableMark ?? "[unreadable]";
@@ -43,7 +42,7 @@ export function buildImageTextPrompt(route = {}) {
   ].join("\n");
 }
 
-/** Системная подсказка перевода: язык, регистр, разметка, словарь. */
+/** System prompt for translation: languages, register, layout, glossary. */
 export function buildTranslationPrompt(route) {
   const target = route.targetLanguage;
   const source = route.sourceLanguage;
@@ -81,7 +80,7 @@ export function buildTranslationPrompt(route) {
     .join("\n");
 }
 
-/** Собирает пачку сообщений в текст для модели. */
+/** Renders a batch of messages as text for the model. */
 export function renderMessagesForPrompt(items) {
   return items
     .map((m) => {

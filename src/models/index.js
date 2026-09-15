@@ -1,6 +1,6 @@
 import openrouter from "./openrouter.js";
 
-/** Провайдеры, к которым плагин умеет обращаться напрямую. */
+/** Providers the plugin can call directly. */
 const PROVIDERS = [openrouter];
 
 export function resolveProvider(id) {
@@ -12,11 +12,12 @@ export function listProviders() {
 }
 
 /**
- * Просит перевод у модели, назначенной маршруту.
+ * Asks the model assigned to a route for a translation.
  *
- * Без явной модели работает через OpenClaw: тот сам выберет ту, на которой
- * настроен агент. С явной моделью плагин идёт к провайдеру напрямую — иначе
- * выбрать модель нельзя, OpenClaw переопределять её не даёт.
+ * With no explicit model it goes through OpenClaw, which picks whatever the
+ * agent is configured with. With an explicit model the plugin calls the
+ * provider itself — there is no other way, since OpenClaw refuses to let a
+ * plugin override the model.
  */
 export async function completeForRoute({ route, api, gatewayConfig, systemPrompt, messages, maxTokens, temperature, purpose }) {
   if (!route.model) {
@@ -25,7 +26,7 @@ export async function completeForRoute({ route, api, gatewayConfig, systemPrompt
 
   const slash = route.model.indexOf("/");
   if (slash < 1) {
-    throw new Error(`модель маршрута "${route.name}" должна выглядеть как "провайдер/модель"`);
+    throw new Error(`model of route "${route.name}" must look like "provider/model"`);
   }
   const providerId = route.model.slice(0, slash);
   const modelId = route.model.slice(slash + 1);
@@ -33,7 +34,7 @@ export async function completeForRoute({ route, api, gatewayConfig, systemPrompt
   const provider = resolveProvider(providerId);
   if (!provider) {
     throw new Error(
-      `к провайдеру "${providerId}" плагин обращаться не умеет; доступные: ${listProviders().join(", ")}`
+      `the plugin cannot call provider "${providerId}"; available: ${listProviders().join(", ")}`
     );
   }
 

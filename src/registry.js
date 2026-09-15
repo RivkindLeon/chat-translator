@@ -2,11 +2,11 @@ import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { join, dirname } from "node:path";
 
 /**
- * Реестр увиденных бесед.
+ * Registry of conversations the server has seen.
  *
- * Журнал шлюза живёт пару суток, и вместе с ним исчезает всякий след о группах,
- * которые редко пишут. Реестр копит это надолго: без него подключить молчащую
- * группу невозможно — её попросту не в чем опознать.
+ * The gateway log only lives a couple of days, and with it goes every trace of
+ * a group that rarely writes. The registry keeps that knowledge: without it a
+ * quiet group cannot be connected at all — there is nothing to recognise it by.
  */
 export async function loadRegistry(file) {
   try {
@@ -23,7 +23,7 @@ export async function saveRegistry(file, data) {
   await rename(tmp, file);
 }
 
-/** Вливает свежие наблюдения, не теряя того, что уже было известно. */
+/** Folds fresh observations in without losing what was already known. */
 export function mergeObservations(registry, observations, { source, now = new Date().toISOString() } = {}) {
   const next = { ...registry };
   for (const obs of observations) {
@@ -36,7 +36,7 @@ export function mergeObservations(registry, observations, { source, now = new Da
         obs.lastSeen && obs.lastSeen > (prev.lastSeen ?? "")
           ? obs.lastSeen
           : prev.lastSeen ?? obs.lastSeen ?? now,
-      // счётчик в журнале виден только за последние сутки, поэтому берём больший
+      // the log only shows the last day or so, so keep the larger count
       count: Math.max(prev.count ?? 0, obs.count ?? 0),
       samples,
     };

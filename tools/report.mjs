@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Отчёт о расходах Hebrew Bridge.
+ * Hebrew Bridge spending report.
  *
- *   node report.mjs              — текущий месяц
- *   node report.mjs 2026-08      — конкретный месяц
- *   node report.mjs all          — за всё время
- *   node report.mjs 2026-08 --days   — ещё и разбивка по дням
+ *   node report.mjs              — current month
+ *   node report.mjs 2026-08      — a specific month
+ *   node report.mjs all          — all time
+ *   node report.mjs 2026-08 --days   — plus a per-day breakdown
  */
 
 import { readFile } from "node:fs/promises";
@@ -26,7 +26,7 @@ let raw;
 try {
   raw = await readFile(usageFile, "utf8");
 } catch {
-  console.log(`Записей о расходах пока нет (${usageFile})`);
+  console.log(`No usage records yet (${usageFile})`);
   process.exit(0);
 }
 
@@ -38,11 +38,11 @@ const rows = raw
   .filter((r) => periodArg === "all" || String(r.ts).startsWith(periodArg));
 
 if (rows.length === 0) {
-  console.log(`За период ${periodArg} записей нет.`);
+  console.log(`No records for ${periodArg}.`);
   process.exit(0);
 }
 
-const KIND_LABEL = { translate: "перевод текста", stt: "расшифровка голоса", image: "чтение картинок" };
+const KIND_LABEL = { translate: "text translation", stt: "voice transcription", image: "image reading" };
 
 const byKind = new Map();
 const byModel = new Map();
@@ -51,7 +51,7 @@ let knownCost = 0;
 let unpriced = 0;
 
 for (const r of rows) {
-  const kind = r.kind ?? "прочее";
+  const kind = r.kind ?? "other";
   const k = byKind.get(kind) ?? { calls: 0, inTok: 0, outTok: 0, cost: 0, unpriced: 0 };
   k.calls += 1;
   k.inTok += r.inputTokens ?? 0;
@@ -59,7 +59,7 @@ for (const r of rows) {
   if (typeof r.costUsd === "number") k.cost += r.costUsd; else k.unpriced += 1;
   byKind.set(kind, k);
 
-  const model = r.model ?? "(не указана)";
+  const model = r.model ?? "(unspecified)";
   const m = byModel.get(model) ?? { calls: 0, cost: 0, unpriced: 0 };
   m.calls += 1;
   if (typeof r.costUsd === "number") m.cost += r.costUsd; else m.unpriced += 1;
@@ -74,10 +74,10 @@ for (const r of rows) {
   if (typeof r.costUsd === "number") knownCost += r.costUsd; else unpriced += 1;
 }
 
-const period = periodArg === "all" ? "за всё время" : periodArg;
-console.log(`\nHebrew Bridge — расходы, ${period}\n`);
+const period = periodArg === "all" ? "all time" : periodArg;
+console.log(`\nHebrew Bridge — spending, ${period}\n`);
 
-console.log(pad("Что", 22) + padL("Вызовов", 9) + padL("Токенов вх.", 13) + padL("Токенов исх.", 13) + padL("Стоимость", 12));
+console.log(pad("What", 22) + padL("Calls", 9) + padL("Tokens in", 13) + padL("Tokens out", 13) + padL("Cost", 12));
 console.log("-".repeat(69));
 for (const [kind, v] of [...byKind].sort((a, b) => b[1].cost - a[1].cost)) {
   console.log(
@@ -85,18 +85,18 @@ for (const [kind, v] of [...byKind].sort((a, b) => b[1].cost - a[1].cost)) {
     padL(v.calls, 9) +
     padL(v.inTok || "—", 13) +
     padL(v.outTok || "—", 13) +
-    padL(v.cost > 0 ? money(v.cost) : (v.unpriced ? "по подписке" : "—"), 12)
+    padL(v.cost > 0 ? money(v.cost) : (v.unpriced ? "subscription" : "—"), 12)
   );
 }
 
-console.log("\n" + pad("Модель", 40) + padL("Вызовов", 9) + padL("Стоимость", 12));
+console.log("\n" + pad("Model", 40) + padL("Calls", 9) + padL("Cost", 12));
 console.log("-".repeat(61));
 for (const [model, v] of [...byModel].sort((a, b) => b[1].cost - a[1].cost)) {
-  console.log(pad(model.slice(0, 39), 40) + padL(v.calls, 9) + padL(v.cost > 0 ? money(v.cost) : "по подписке", 12));
+  console.log(pad(model.slice(0, 39), 40) + padL(v.calls, 9) + padL(v.cost > 0 ? money(v.cost) : "subscription", 12));
 }
 
 if (wantDays) {
-  console.log("\n" + pad("День", 14) + padL("Вызовов", 9) + padL("Стоимость", 12));
+  console.log("\n" + pad("Day", 14) + padL("Calls", 9) + padL("Cost", 12));
   console.log("-".repeat(35));
   for (const [day, v] of [...byDay].sort()) {
     console.log(pad(day, 14) + padL(v.calls, 9) + padL(v.cost > 0 ? money(v.cost) : "—", 12));
@@ -104,13 +104,13 @@ if (wantDays) {
 }
 
 console.log("\n" + "=".repeat(45));
-console.log(`ИТОГО за ${period}: ${money(knownCost)}`);
+console.log(`TOTAL for ${period}: ${money(knownCost)}`);
 if (unpriced > 0) {
-  console.log(`Плюс ${unpriced} вызов(ов) без цены — это OpenAI по подписке;`);
-  console.log(`точная сумма по ним видна только в кабинете OpenAI.`);
+  console.log(`Plus ${unpriced} call(s) with no price — those are OpenAI on the subscription;`);
+  console.log(`their exact amount is only visible in the OpenAI dashboard.`);
 }
 const days = new Set([...byDay.keys()]).size;
 if (days > 1 && knownCost > 0) {
-  console.log(`В среднем ${money(knownCost / days)} в день · прогноз на 30 дней ${money((knownCost / days) * 30)}`);
+  console.log(`Average ${money(knownCost / days)} per day · 30-day projection ${money((knownCost / days) * 30)}`);
 }
 console.log();

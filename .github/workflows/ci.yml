@@ -13,9 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Проверка синтаксиса
+      - name: Syntax check
         run: |
           node --check index.js
-          for f in src/*.js tools/*.mjs; do node --check "$f"; done
-      - name: Тесты
+          find src tools -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+      - name: Tests
         run: node test.mjs

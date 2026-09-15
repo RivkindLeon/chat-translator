@@ -1,7 +1,7 @@
 {
   "id": "hebrew-bridge",
   "name": "Hebrew Bridge",
-  "description": "Переводит поток сообщений ивритской WhatsApp-группы на русский и доставляет перевод отдельным каналом.",
+  "description": "Translates a stream of messages from a watched chat into your language and delivers it over a separate channel.",
   "activation": {
     "onStartup": true
   },
@@ -12,112 +12,112 @@
     "properties": {
       "groupJid": {
         "type": "string",
-        "description": "JID основной группы-источника"
+        "description": "JID of the primary source group"
       },
       "targetLanguage": {
         "type": "string",
-        "description": "Язык перевода, по-английски для подсказки модели: Russian, English, German…"
+        "description": "Target language, written in English as a hint for the model: Russian, English, German…"
       },
       "model": {
         "type": "string",
-        "description": "Модель для перевода, например openrouter/google/gemini-3.7-flash"
+        "description": "Translation model, e.g. openrouter/google/gemini-3.7-flash"
       },
       "telegramChatId": {
         "type": "string",
-        "description": "Chat id в Telegram, куда слать переводы"
+        "description": "Telegram chat id to send the translations to"
       },
       "debounceMs": {
         "type": "number",
-        "description": "Пауза тишины перед отправкой пачки, мс (по умолчанию 20000)"
+        "description": "Silence before a batch is sent, ms (default 20000)"
       },
       "maxWaitMs": {
         "type": "number",
-        "description": "Максимум ожидания при непрерывном потоке, мс (по умолчанию 120000)"
+        "description": "Maximum wait during a continuous stream, ms (default 120000)"
       },
       "maxBatch": {
         "type": "number",
-        "description": "Максимум сообщений в одной пачке (по умолчанию 15)"
+        "description": "Maximum messages in a single batch (default 15)"
       },
       "contextSize": {
         "type": "number",
-        "description": "Сколько предыдущих сообщений передавать как контекст (по умолчанию 10)"
+        "description": "How many previous messages to pass as context (default 10)"
       },
       "alertOn": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "Слова-триггеры для пометки сообщения флажком"
+        "description": "Trigger words that flag a message"
       },
       "glossary": {
         "type": "object",
         "additionalProperties": {
           "type": "string"
         },
-        "description": "Словарь: как писать имена и термины по-русски"
+        "description": "Glossary: how to spell names and terms in the target language"
       },
       "dryRun": {
         "type": "boolean",
-        "description": "Не отправлять доставку, только писать в лог"
+        "description": "Do not deliver, only write to the log"
       },
       "debugHooks": {
         "type": "boolean",
-        "description": "Диагностика: логировать все входящие события хуков"
+        "description": "Diagnostics: log every incoming hook event"
       },
       "groupJids": {
         "type": "array",
         "items": {
           "type": "string"
         },
-        "description": "Дополнительные JID групп (например тестовая)"
+        "description": "Additional group JIDs (e.g. a test group)"
       },
       "agentId": {
         "type": "string",
-        "description": "Агент, чью модель и креды использовать для перевода"
+        "description": "Agent whose model and credentials to use for translation"
       },
       "blockAgent": {
         "type": "boolean",
-        "description": "Не давать агенту обрабатывать сообщения читаемых групп (по умолчанию да)"
+        "description": "Keep the agent from handling messages of watched groups (default yes)"
       },
       "transcribeVoice": {
         "type": "boolean",
-        "description": "Расшифровывать голосовые (по умолчанию да)"
+        "description": "Transcribe voice messages (default yes)"
       },
       "readImages": {
         "type": "boolean",
-        "description": "Снимать текст с изображений (по умолчанию да)"
+        "description": "Read text off images (default yes)"
       },
       "audioLanguage": {
         "type": "string",
-        "description": "Язык голосовых для распознавания (по умолчанию he)"
+        "description": "Language of voice messages for transcription (default he)"
       },
       "imageProvider": {
         "type": "string",
-        "description": "Провайдер для чтения картинок, например openai"
+        "description": "Provider for image reading, e.g. openai"
       },
       "imageModel": {
         "type": "string",
-        "description": "Модель для чтения картинок, например gpt-5.4-mini"
+        "description": "Model for image reading, e.g. gpt-5.4-mini"
       },
       "audioProvider": {
         "type": "string",
-        "description": "Провайдер для расшифровки голоса"
+        "description": "Provider for voice transcription"
       },
       "audioModel": {
         "type": "string",
-        "description": "Модель для расшифровки голоса"
+        "description": "Model for voice transcription"
       },
       "selfTestImage": {
         "type": "string",
-        "description": "Путь к картинке для разовой самодиагностики чтения текста при старте"
+        "description": "Path to an image for a one-off text-reading self-check at startup"
       },
       "dataDir": {
         "type": "string",
-        "description": "Папка для журналов и учёта расходов (по умолчанию ~/.openclaw/hebrew-bridge)"
+        "description": "Folder for journals and cost accounting (default ~/.openclaw/hebrew-bridge)"
       },
       "logRetentionDays": {
         "type": "number",
-        "description": "Сколько дней хранить журналы (по умолчанию 60)"
+        "description": "How many days to keep the journals (default 60)"
       },
       "prices": {
         "type": "object",
@@ -133,73 +133,73 @@
           },
           "additionalProperties": false
         },
-        "description": "Цены в долларах за миллион токенов, переопределяют встроенные"
+        "description": "Prices in dollars per million tokens, overriding the built-in ones"
       },
       "quotaWatch": {
         "type": "boolean",
-        "description": "Следить за остатком квоты подписки (по умолчанию да)"
+        "description": "Watch the remaining subscription quota (default yes)"
       },
       "quotaThreshold": {
         "type": "number",
-        "description": "Порог в процентах, ниже которого приходит предупреждение (по умолчанию 20)"
+        "description": "Percentage threshold below which a warning is sent (default 20)"
       },
       "quotaCheckMinutes": {
         "type": "number",
-        "description": "Как часто проверять квоту, минут (по умолчанию 30)"
+        "description": "How often to check the quota, minutes (default 30)"
       },
       "cliPath": {
         "type": "string",
-        "description": "Путь к openclaw CLI для проверки квоты"
+        "description": "Path to the openclaw CLI used for the quota check"
       },
       "alertChatId": {
         "type": "string",
-        "description": "Куда слать технические предупреждения (по умолчанию туда же, куда переводы)"
+        "description": "Where to send technical warnings (default: same place as the translations)"
       },
       "quotaRepeatHours": {
         "type": "number",
-        "description": "Не повторять предупреждение о том же окне чаще, чем раз в N часов (по умолчанию 6)"
+        "description": "Do not repeat a warning about the same window more than once every N hours (default 6)"
       },
       "imageTimeoutMs": {
         "type": "number",
-        "description": "Сколько ждать распознавания картинки, мс (по умолчанию 120000)"
+        "description": "How long to wait for image recognition, ms (default 120000)"
       },
       "logTexts": {
         "type": "boolean",
-        "description": "Сохранять тексты (оригинал, распознанное, перевод) для оценки качества"
+        "description": "Keep the texts (original, recognised, translated) for quality review"
       },
       "routes": {
         "type": "array",
-        "description": "Группы и куда доставлять их переводы. У каждой свой контекст и словарь.",
+        "description": "Chats and where to deliver their translations. Each has its own context and glossary.",
         "items": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "jid": {
               "type": "string",
-              "description": "JID группы-источника"
+              "description": "JID of the source group"
             },
             "name": {
               "type": "string",
-              "description": "Понятное название для журналов"
+              "description": "Human-readable name for the journals"
             },
             "chatId": {
               "type": "string",
-              "description": "Чат Telegram для доставки"
+              "description": "Telegram chat for delivery"
             },
             "threadId": {
               "type": "string",
-              "description": "Тема в супергруппе (если используется)"
+              "description": "Topic inside a supergroup (if used)"
             },
             "targetLanguage": {
               "type": "string",
-              "description": "Язык перевода, по-английски для подсказки модели: Russian, English, German…"
+              "description": "Target language, written in English as a hint for the model: Russian, English, German…"
             },
             "glossary": {
               "type": "object",
               "additionalProperties": {
                 "type": "string"
               },
-              "description": "Имена и термины именно этой группы"
+              "description": "Names and terms specific to this chat"
             },
             "debounceMs": {
               "type": "number"
@@ -215,26 +215,26 @@
             },
             "source": {
               "type": "string",
-              "description": "Откуда читать: идентификатор источника (по умолчанию whatsapp)"
+              "description": "Where to read from: source identifier (default whatsapp)"
             },
             "delivery": {
               "type": "string",
-              "description": "Куда доставлять: идентификатор получателя (по умолчанию telegram)"
+              "description": "Where to deliver: delivery identifier (default telegram)"
             },
             "sourceLanguage": {
               "type": "string",
-              "description": "Язык сообщений в источнике, по-английски: Hebrew, Arabic… (можно не указывать)"
+              "description": "Language of the source messages, in English: Hebrew, Arabic… (optional)"
             },
             "ownerName": {
               "type": "string",
-              "description": "Чьи упоминания помечать флажком ⚑"
+              "description": "Whose mentions to mark with the ⚑ flag"
             },
             "labels": {
               "type": "object",
               "additionalProperties": {
                 "type": "string"
               },
-              "description": "Подписи вложений на нужном языке: image, audio, video, document, sticker"
+              "description": "Attachment captions in your language: image, audio, video, document, sticker"
             },
             "labelsPlural": {
               "type": "object",
@@ -250,19 +250,19 @@
                   }
                 }
               },
-              "description": "Как называть вложения во множественном числе: image: {icon, word}"
+              "description": "How to name attachments in the plural: image: {icon, word}"
             },
             "timeZone": {
               "type": "string",
-              "description": "Часовой пояс времени в заголовках, например Asia/Jerusalem (по умолчанию пояс сервера)"
+              "description": "Time zone for the headers, e.g. Asia/Jerusalem (default: the server zone)"
             },
             "locale": {
               "type": "string",
-              "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
+              "description": "Time format, e.g. ru-RU or en-GB (default: 24-hour)"
             },
             "model": {
               "type": "string",
-              "description": "Своя модель для этого маршрута, вида провайдер/модель (например openrouter/google/gemini-3.7-flash). Без неё используется модель агента."
+              "description": "A dedicated model for this route, as provider/model (e.g. openrouter/google/gemini-3.7-flash). Without it the agent model is used."
             }
           },
           "required": [
@@ -272,57 +272,57 @@
       },
       "muteWhatsAppOutbound": {
         "type": "boolean",
-        "description": "Глушить ВСЕ исходящие в WhatsApp, включая личные чаты (по умолчанию да)"
+        "description": "Mute ALL outbound WhatsApp traffic, direct chats included (default yes)"
       },
       "replay": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Разовая догонялка: взять сообщения группы из лога и перевести их",
+        "description": "One-off replay: take the chat messages from the log and translate them",
         "properties": {
           "jid": {
             "type": "string",
-            "description": "Группа, чьи сообщения догнать"
+            "description": "The chat whose messages to replay"
           },
           "minutes": {
             "type": "number",
-            "description": "За сколько минут назад (по умолчанию 120)"
+            "description": "How many minutes back to look (default 120)"
           },
           "sender": {
             "type": "string",
-            "description": "Чем подписать отправителя"
+            "description": "What to label the sender as"
           },
           "logDir": {
             "type": "string",
-            "description": "Где лежат логи шлюза"
+            "description": "Where the gateway logs live"
           }
         }
       },
       "authProbe": {
         "type": "boolean",
-        "description": "Разовая проверка: доступен ли плагину прямой доступ к провайдерам"
+        "description": "One-off check: whether the plugin can reach providers directly"
       },
       "source": {
         "type": "string",
-        "description": "Источник по умолчанию для всех маршрутов"
+        "description": "Default source for every route"
       },
       "delivery": {
         "type": "string",
-        "description": "Получатель по умолчанию для всех маршрутов"
+        "description": "Default delivery for every route"
       },
       "sourceLanguage": {
         "type": "string",
-        "description": "Язык сообщений в источнике, по-английски: Hebrew, Arabic… (можно не указывать)"
+        "description": "Language of the source messages, in English: Hebrew, Arabic… (optional)"
       },
       "ownerName": {
         "type": "string",
-        "description": "Чьи упоминания помечать флажком ⚑"
+        "description": "Whose mentions to mark with the ⚑ flag"
       },
       "labels": {
         "type": "object",
         "additionalProperties": {
           "type": "string"
         },
-        "description": "Подписи вложений на нужном языке: image, audio, video, document, sticker"
+        "description": "Attachment captions in your language: image, audio, video, document, sticker"
       },
       "labelsPlural": {
         "type": "object",
@@ -338,50 +338,50 @@
             }
           }
         },
-        "description": "Как называть вложения во множественном числе: image: {icon, word}"
+        "description": "How to name attachments in the plural: image: {icon, word}"
       },
       "timeZone": {
         "type": "string",
-        "description": "Часовой пояс времени в заголовках, например Asia/Jerusalem (по умолчанию пояс сервера)"
+        "description": "Time zone for the headers, e.g. Asia/Jerusalem (default: the server zone)"
       },
       "locale": {
         "type": "string",
-        "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
+        "description": "Time format, e.g. ru-RU or en-GB (default: 24-hour)"
       },
       "groupRegistry": {
         "type": "boolean",
-        "description": "Вести реестр увиденных бесед (по умолчанию да)"
+        "description": "Keep a registry of seen conversations (default yes)"
       },
       "groupScanMinutes": {
         "type": "number",
-        "description": "Как часто обходить журнал в поисках бесед, минут (по умолчанию 60)"
+        "description": "How often to scan the log for conversations, minutes (default 60)"
       },
       "logDir": {
         "type": "string",
-        "description": "Где лежит журнал шлюза (по умолчанию /tmp/openclaw)"
+        "description": "Where the gateway journal lives (default /tmp/openclaw)"
       },
       "routeModel": {
         "type": "string",
-        "description": "Модель по умолчанию для всех маршрутов (провайдер/модель)"
+        "description": "Default model for every route (provider/model)"
       }
     }
   },
   "uiHints": {
     "groupJid": {
-      "label": "JID группы",
-      "help": "Источник сообщений"
+      "label": "Group JID",
+      "help": "Message source"
     },
     "model": {
-      "label": "Модель",
+      "label": "Model",
       "help": "openrouter/google/gemini-3.7-flash"
     },
     "telegramChatId": {
       "label": "Telegram chat id",
-      "help": "Куда доставлять перевод"
+      "help": "Where to deliver the translation"
     },
     "debounceMs": {
-      "label": "Дебаунс, мс",
-      "help": "Пауза тишины перед отправкой пачки"
+      "label": "Debounce, ms",
+      "help": "Silence before a batch is sent"
     }
   }
 }

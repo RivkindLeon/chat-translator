@@ -1,4 +1,4 @@
-/** Медиа пока не расшифровываем — помечаем, чтобы не терялся факт сообщения. */
+/** Attachments are not transcribed by default — they are marked, so nothing goes missing. */
 export const MEDIA_LABELS = {
   image: "📷 image",
   audio: "🎤 voice message (not transcribed)",
@@ -7,7 +7,7 @@ export const MEDIA_LABELS = {
   sticker: "🩹 sticker",
 };
 
-/** Как называть вложения, когда их несколько подряд. */
+/** How to name attachments when several arrive in a row. */
 export const MEDIA_PLURAL = {
   image: { icon: "📷", word: "photos" },
   audio: { icon: "🎤", word: "voice messages" },
@@ -17,8 +17,8 @@ export const MEDIA_PLURAL = {
 };
 
 /**
- * Двенадцать фотографий с прогулки не должны занимать тридцать шесть строк.
- * Подряд идущие вложения одного типа от одного человека сворачиваем в строку.
+ * Twelve holiday photos should not take thirty-six lines. Consecutive
+ * attachments of one kind from one person collapse into a single line.
  */
 export function renderMediaNotes(items, labels = {}, plurals = {}) {
   const groups = [];
@@ -43,7 +43,7 @@ export function renderMediaNotes(items, labels = {}, plurals = {}) {
   });
 }
 
-/** Канал кладёт скачанный файл на диск; путь приходит в метаданных по-разному. */
+/** The channel downloads the file itself; the path arrives in metadata under varying keys. */
 export function extractMediaFile(event) {
   const m = event.metadata ?? {};
   const first = Array.isArray(m.media) ? m.media[0] ?? {} : {};

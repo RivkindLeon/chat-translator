@@ -1,6 +1,6 @@
 import whatsapp from "./whatsapp.js";
 
-/** Источники сообщений. Добавить новый мессенджер — значит положить сюда файл. */
+/** Message sources. Adding a messenger means dropping a file in here. */
 const SOURCES = [whatsapp];
 
 export function resolveSource(id) {

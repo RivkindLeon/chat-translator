@@ -1,4 +1,4 @@
-/** Цены в долларах за миллион токенов. Переопределяются в конфиге через `prices`. */
+/** Prices in US dollars per million tokens. Overridden by the `prices` setting. */
 export const DEFAULT_PRICES = {
   "google/gemini-3.1-flash-lite": { in: 0.25, out: 1.5 },
   "google/gemini-3.5-flash-lite": { in: 0.3, out: 2.5 },
@@ -8,7 +8,7 @@ export const DEFAULT_PRICES = {
   "deepseek/deepseek-v4-flash": { in: 0.0868, out: 0.1736 },
 };
 
-/** Модель может прийти как "google/x" или "openrouter/google/x" — сводим к одному виду. */
+/** A model may arrive as "google/x" or "openrouter/google/x" — reduce to one shape. */
 export function normalizeModelKey(model) {
   if (!model) return "";
   const parts = String(model).split("/");

@@ -1,25 +1,25 @@
 /**
- * Доставка в Telegram.
+ * Delivery to Telegram.
  *
- * Знает две вещи, которых не должен знать остальной плагин: где взять доступ
- * к боту и как выглядит запрос на отправку.
+ * Holds the two things the rest of the plugin should not know: where the bot
+ * credentials come from, and what a send request looks like.
  */
 export default {
   id: "telegram",
 
-  /** Предел длины одного сообщения. */
+  /** Length limit of a single message. */
   limit: 4096,
 
-  /** Токен живёт в настройках канала OpenClaw — своей копии не держим. */
+  /** The token lives in the OpenClaw channel settings — we keep no copy. */
   resolveAuth(gatewayConfig) {
     const token = gatewayConfig?.channels?.telegram?.botToken;
-    if (!token) throw new Error("не настроен доступ к боту Telegram");
+    if (!token) throw new Error("Telegram bot credentials are not configured");
     return token;
   },
 
   /**
-   * Отправляет один кусок текста. Бросает исключение при неудаче;
-   * пометка retriable говорит вызывающему, что повтор имеет смысл.
+   * Sends one chunk of text. Throws on failure; the `retriable` flag tells the
+   * caller that trying again is worth it.
    */
   async sendChunk({ auth, target, thread, text }) {
     const res = await fetch(`https://api.telegram.org/bot${auth}/sendMessage`, {
@@ -35,8 +35,8 @@ export default {
     if (res.ok) return;
 
     const body = await res.text().catch(() => "");
-    const err = new Error(`Telegram ответил ${res.status}: ${body.slice(0, 200)}`);
-    // 4xx — наша вина (неверный адрес, бота выкинули); повторять бессмысленно
+    const err = new Error(`Telegram replied ${res.status}: ${body.slice(0, 200)}`);
+    // 4xx is our own fault (wrong address, bot removed) — retrying is pointless
     if (res.status >= 400 && res.status < 500) throw err;
     throw Object.assign(err, { retriable: true });
   },

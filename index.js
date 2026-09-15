@@ -7,15 +7,15 @@ import { homedir } from "node:os";
 const execFileAsync = promisify(execFile);
 
 /**
- * Hebrew Bridge — плагин OpenClaw.
+ * Hebrew Bridge — an OpenClaw plugin.
  *
- * Слушает одну WhatsApp-группу, копит сообщения пачками, переводит их
- * одним запросом к модели и доставляет перевод отдельным каналом.
+ * Reads chosen conversations, accumulates messages into batches, translates a
+ * batch with a single model call and delivers the result elsewhere.
  *
- * Принципы:
- *  - в исходную группу не пишем никогда, только читаем;
- *  - доставка идёт по жёсткому whitelist адресатов из конфига;
- *  - пачка вместо сообщения-за-сообщением: дешевле, качественнее, тише.
+ * Principles:
+ *  - never write into the source messenger, only read;
+ *  - deliver strictly to addresses named in the settings;
+ *  - batch rather than message-by-message: cheaper, better, quieter.
  */
 
 import { DEFAULTS, resolveRoutes } from "./src/config.js";
@@ -31,7 +31,7 @@ import { completeForRoute } from "./src/models/index.js";
 export default {
   id: "hebrew-bridge",
   name: "Hebrew Bridge",
-  description: "Переводит ивритскую WhatsApp-группу на русский",
+  description: "Translates a watched chat into your language and forwards it to a destination",
 
   register(api) {
     let log;
@@ -52,7 +52,7 @@ export default {
       dirsReady = true;
     };
 
-    /** Свой журнал: постоянная папка, файл на день, старые удаляются. */
+    /** Our own journal: a lasting folder, one file per day, old ones pruned. */
     const journal = async (level, message) => {
       try {
         await ensureDirs();
@@ -61,11 +61,11 @@ export default {
         const line = `${now.toISOString()} ${level.toUpperCase().padEnd(5)} ${message}\n`;
         await appendFile(join(dataDir(), "logs", `${day}.log`), line, "utf8");
       } catch {
-        // журнал не должен ломать перевод
+        // journalling must never break a translation
       }
     };
 
-    /** Образцы текста — чтобы можно было оценивать качество перевода, а не гадать. */
+    /** Text samples, so translation quality can be judged rather than guessed. */
     const sample = async (label, text) => {
       if (readConfig().logTexts !== true) return;
       try {
@@ -74,22 +74,22 @@ export default {
         const body = `\n===== ${new Date().toISOString()} · ${label} =====\n${text}\n`;
         await appendFile(join(dataDir(), "samples", `${day}.log`), body, "utf8");
       } catch {
-        // образцы не критичны
+        // samples are not critical
       }
     };
 
-    /** Одна строка на каждый платный вызов — из этого потом считается счёт за месяц. */
+    /** One line per paid call — the monthly bill is added up from these. */
     const recordUsage = async (entry) => {
       try {
         await ensureDirs();
         const row = { ts: new Date().toISOString(), ...entry };
         await appendFile(join(dataDir(), "usage.jsonl"), `${JSON.stringify(row)}\n`, "utf8");
       } catch (err) {
-        void journal("warn", `не удалось записать расход: ${err?.message ?? err}`);
+        void journal("warn", `could not record usage: ${err?.message ?? err}`);
       }
     };
 
-    /** Чистка старых журналов (расходы не трогаем — они нужны для отчётности). */
+    /** Prunes old journals; usage records stay, they are the accounting trail. */
     const pruneLogs = async () => {
       try {
         const days = readConfig().logRetentionDays ?? 60;
@@ -101,7 +101,7 @@ export default {
           if (info.mtimeMs < cutoff) await unlink(file);
         }
       } catch {
-        // папки может ещё не быть
+        // the folder may not exist yet
       }
     };
 
@@ -118,17 +118,11 @@ export default {
       }
     };
 
-    // ---- состояние в памяти -------------------------------------------------
-    const pending = [];            // накопленные, ещё не переведённые
-    const recentContext = [];      // последние переведённые — контекст для модели
-    const seenIds = new Set();     // защита от дублей
-    let debounceTimer = null;
-    let hardTimer = null;
-    let flushing = false;
+    // ---- in-memory state ----------------------------------------------------
 
-    const observedSessions = new Set();  // sessionKey разговоров, которые мы читаем
+    const observedSessions = new Set();  // sessionKeys of conversations we watch
 
-    /** У каждой группы свой мир: свои накопленные сообщения, свой контекст, свои таймеры. */
+    /** Every conversation gets its own world: buffer, context and timers. */
     const worlds = new Map();
     const worldOf = (jid) => {
       let w = worlds.get(jid);
@@ -147,11 +141,11 @@ export default {
       return w;
     };
 
-    // ---- буфер переживает перезапуск ------------------------------------
+    // ---- the buffer survives a restart ----------------------------------
     const stateFile = () => join(dataDir(), "pending.json");
     let saveTimer = null;
 
-    /** Пишем атомарно: сначала во временный файл, потом переименовываем. */
+    /** Written atomically: to a temporary file first, then renamed. */
     const saveState = async () => {
       try {
         await ensureDirs();
@@ -168,30 +162,30 @@ export default {
         await writeFile(tmp, JSON.stringify(dump), "utf8");
         await rename(tmp, stateFile());
       } catch (err) {
-        void journal("warn", `не удалось сохранить буфер: ${err?.message ?? err}`);
+        void journal("warn", `could not save the buffer: ${err?.message ?? err}`);
       }
     };
 
-    /** Пишем не чаще раза в секунду — на каждое сообщение диск дёргать незачем. */
+    /** At most once a second — no reason to touch the disk per message. */
     const scheduleSave = () => {
       if (saveTimer) return;
       saveTimer = setTimeout(() => { saveTimer = null; void saveState(); }, 1000);
       if (typeof saveTimer.unref === "function") saveTimer.unref();
     };
 
-    /** При старте поднимаем то, что не успели обработать до перезапуска. */
+    /** On startup, pick up whatever was left unprocessed before the restart. */
     const restoreState = async () => {
       let dump;
       try {
         dump = JSON.parse(await readFile(stateFile(), "utf8"));
       } catch {
-        return;   // файла нет — обычная ситуация
+        return;   // no file is the normal case
       }
       const routes = resolveRoutes(readConfig());
       let restored = 0;
       for (const [jid, saved] of Object.entries(dump ?? {})) {
         const route = routes.find((r) => r.jid === jid);
-        if (!route) continue;   // группу отключили, пока сервис лежал
+        if (!route) continue;   // the conversation was disconnected while we were down
         const w = worldOf(jid);
         w.pending.push(...(saved.pending ?? []));
         w.undelivered.push(...(saved.undelivered ?? []));
@@ -199,17 +193,17 @@ export default {
         restored += (saved.pending?.length ?? 0) + (saved.undelivered?.length ?? 0);
         if (w.pending.length > 0 || w.undelivered.length > 0) scheduleFlush(route);
       }
-      if (restored > 0) void journal("info", `после перезапуска восстановлено ${restored} сообщ.`);
+      if (restored > 0) void journal("info", `restored ${restored} message(s) after restart`);
     };
 
-    /** Досылаем то, что уже переведено, но не ушло: модель повторно не зовём. */
+    /** Re-sends what was translated but never delivered; the model is not called again. */
     const flushUndelivered = async (route, w) => {
       while (w.undelivered.length > 0) {
         try {
           await deliver(w.undelivered[0], route);
           w.undelivered.shift();
         } catch (err) {
-          void journal("warn", `[${route.name}] очередь доставки ждёт (${w.undelivered.length} шт.): ${err?.message ?? err}`);
+          void journal("warn", `[${route.name}] delivery queue waiting (${w.undelivered.length}): ${err?.message ?? err}`);
           return;
         }
       }
@@ -220,11 +214,11 @@ export default {
       if (w.hardTimer) { clearTimeout(w.hardTimer); w.hardTimer = null; }
     };
 
-    /** Доставка перевода по маршруту; в тестовом режиме только пишем в журнал. */
+    /** Delivers a translation along its route; in dry-run mode only journals it. */
     async function deliver(text, route) {
       const cfg = readConfig();
       if (cfg.dryRun) {
-        log.info?.(`[hebrew-bridge] dry-run, доставка пропущена:\n${text}`);
+        log.info?.(`[hebrew-bridge] dry run, delivery skipped:\n${text}`);
         return;
       }
       await deliverText({ text, route, gatewayConfig: readGatewayConfig(), log, journal });
@@ -265,14 +259,14 @@ export default {
               item.kind = "text";
               item.text = text;
               item.prefix = "🎤";
-              const msg = `[${route.name}] голосовое расшифровано (${text.length} симв.), провайдер=${res?.provider ?? "?"} модель=${res?.model ?? "?"}`;
+              const msg = `[${route.name}] voice transcribed (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? "?"}`;
               log.info?.(`[hebrew-bridge] ${msg}`);
               void journal("info", msg);
-              void sample("расшифровка голоса", text);
+              void sample("voice transcript", text);
             }
           } else if (item.mediaKind === "image" && cfg.readImages !== false) {
-            // describeImageFile сам пропускает работу ("primary model supports vision natively"),
-            // поэтому при заданной модели зовём вариант с принудительным выбором.
+            // describeImageFile skips the job on its own ("primary model supports vision
+            // natively"), so with an explicit model we call the forcing variant.
             const res = (cfg.imageProvider && cfg.imageModel)
               ? await api.runtime.mediaUnderstanding.describeImageFileWithModel({
                   filePath: item.mediaPath,
@@ -307,22 +301,22 @@ export default {
               item.kind = "text";
               item.text = text;
               item.prefix = "📷";
-              const msg = `[${route.name}] с картинки снят текст (${text.length} симв.), провайдер=${res?.provider ?? "?"} модель=${res?.model ?? cfg.imageModel ?? "?"}`;
+              const msg = `[${route.name}] text read from image (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? cfg.imageModel ?? "?"}`;
               log.info?.(`[hebrew-bridge] ${msg}`);
               void journal("info", msg);
-              void sample(`OCR картинки · ${res?.model ?? cfg.imageModel}`, text);
+              void sample(`image text · ${res?.model ?? cfg.imageModel}`, text);
             } else {
-              // чаще всего это значит, что модель не умеет читать изображения
+              // usually this means the model cannot read images at all
               const miss =
-                `[${route.name}] с картинки текст не снят: ответ="${String(res?.text ?? "").slice(0, 60)}" ` +
-                `провайдер=${res?.provider ?? "?"} модель=${res?.model ?? cfg.imageModel ?? "?"}`;
+                `[${route.name}] no text read from image: reply="${String(res?.text ?? "").slice(0, 60)}" ` +
+                `provider=${res?.provider ?? "?"} model=${res?.model ?? cfg.imageModel ?? "?"}`;
               log.warn?.(`[hebrew-bridge] ${miss}`);
               void journal("warn", miss);
             }
           }
         } catch (err) {
-          // не смогли — остаётся обычная пометка, сообщение не теряется
-          const msg = `[${route.name}] ${item.mediaKind}: обработка не удалась (${err?.message ?? err})`;
+          // if it fails, the plain marker remains and nothing is lost
+          const msg = `[${route.name}] ${item.mediaKind}: processing failed (${err?.message ?? err})`;
           log.warn?.(`[hebrew-bridge] ${msg}`);
           void journal("warn", msg);
         }
@@ -352,7 +346,7 @@ export default {
               await deliver(mediaLines.join("\n\n"), route);
             } catch (err) {
               w.undelivered.push(mediaLines.join("\n\n"));
-              void journal("error", `[${route.name}] доставка не удалась: ${err?.message ?? err}`);
+              void journal("error", `[${route.name}] delivery failed: ${err?.message ?? err}`);
             }
           }
           w.recentContext.push(...batch);
@@ -361,9 +355,9 @@ export default {
         }
 
         const contextBlock = w.recentContext.length
-          ? `КОНТЕКСТ (уже переведённые сообщения выше по ленте)\n${renderMessagesForPrompt(w.recentContext)}\n\n`
+          ? `CONTEXT (already translated messages, earlier in the feed)\n${renderMessagesForPrompt(w.recentContext)}\n\n`
           : "";
-        const userContent = `${contextBlock}ПЕРЕВЕДИ ЭТИ СООБЩЕНИЯ\n${renderMessagesForPrompt(textItems)}`;
+        const userContent = `${contextBlock}TRANSLATE THESE MESSAGES\n${renderMessagesForPrompt(textItems)}`;
 
         const result = await completeForRoute({
           route,
@@ -373,18 +367,18 @@ export default {
           messages: [{ role: "user", content: userContent }],
           maxTokens: 2000,
           temperature: 0.2,
-          purpose: `hebrew-bridge: перевод пачки (${route.name})`,
+          purpose: `hebrew-bridge: batch translation (${route.name})`,
         });
 
         const translated = (result?.text ?? "").trim();
         if (!translated) {
-          void journal("warn", `[${route.name}] модель вернула пустой ответ, пачка пропущена`);
+          void journal("warn", `[${route.name}] the model returned nothing, batch skipped`);
           return;
         }
 
         void sample(
-          `перевод · ${route.name} · ${result?.model ?? "?"}`,
-          `--- ИСХОДНИК ---\n${renderMessagesForPrompt(textItems)}\n\n--- ПЕРЕВОД ---\n${translated}`
+          `translation · ${route.name} · ${result?.model ?? "?"}`,
+          `--- SOURCE ---\n${renderMessagesForPrompt(textItems)}\n\n--- TRANSLATION ---\n${translated}`
         );
 
         const payload = [translated, ...mediaLines].join("\n\n");
@@ -392,7 +386,7 @@ export default {
           await deliver(payload, route);
         } catch (err) {
           w.undelivered.push(payload);
-          void journal("error", `[${route.name}] доставка не удалась, поставлено в очередь: ${err?.message ?? err}`);
+          void journal("error", `[${route.name}] delivery failed, queued: ${err?.message ?? err}`);
         }
 
         w.recentContext.push(...batch);
@@ -403,8 +397,8 @@ export default {
         const outTok = usage.outputTokens ?? usage.completionTokens;
         const cost = estimateCostUsd(result?.model, inTok, outTok, cfg.prices);
         const summary =
-          `[${route.name}] переведено ${textItems.length} сообщ. (+${mediaItems.length} медиа), ` +
-          `модель ${result?.model ?? "?"}, токены in=${inTok ?? "?"} out=${outTok ?? "?"}` +
+          `[${route.name}] translated ${textItems.length} message(s) (+${mediaItems.length} attachment notes), ` +
+          `model ${result?.model ?? "?"}, tokens in=${inTok ?? "?"} out=${outTok ?? "?"}` +
           (cost !== undefined ? `, ≈$${cost.toFixed(6)}` : "");
         log.info?.(`[hebrew-bridge] ${summary}`);
         void journal("info", summary);
@@ -421,8 +415,8 @@ export default {
         });
       } catch (err) {
         w.pending.unshift(...batch);
-        log.error?.(`[hebrew-bridge] [${route.name}] ошибка перевода: ${err?.message ?? err}`);
-        void journal("error", `[${route.name}] ошибка перевода: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] [${route.name}] translation failed: ${err?.message ?? err}`);
+        void journal("error", `[${route.name}] translation failed: ${err?.message ?? err}`);
       } finally {
         w.flushing = false;
         void saveState();
@@ -440,8 +434,8 @@ export default {
       if (w.pending.length >= route.maxBatch) void flush(route);
     }
 
-    // ---- приём сообщений ----------------------------------------------------
-    /** Пришло сообщение из наблюдаемой беседы — кладём в её накопитель. */
+    // ---- message intake ------------------------------------------------------
+    /** A message arrived from a watched conversation — put it into that world's buffer. */
     function handleIncoming(msg) {
       try {
         const cfg = readConfig();
@@ -471,11 +465,11 @@ export default {
         if (msg.kind === "media") {
           w.pending.push({ ...base, kind: "media", mediaKind: msg.mediaKind, mediaPath: msg.mediaPath, mime: msg.mime, text: "" });
           if (!msg.mediaPath) {
-            const miss = `[${route.name}] вложение без пути к файлу (${msg.mediaKind})`;
+            const miss = `[${route.name}] attachment without a file path (${msg.mediaKind})`;
             log.warn?.(`[hebrew-bridge] ${miss}`);
             void journal("warn", miss);
           } else {
-            void journal("info", `[${route.name}] принято медиа ${msg.mediaKind}: ${msg.mediaPath}`);
+            void journal("info", `[${route.name}] media received ${msg.mediaKind}: ${msg.mediaPath}`);
           }
         } else {
           w.pending.push({ ...base, kind: "text", text: msg.text });
@@ -484,13 +478,13 @@ export default {
         scheduleFlush(route);
         scheduleSave();
       } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой приёма: ${err?.message ?? err}`);
-        void journal("error", `сбой приёма: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] intake failed: ${err?.message ?? err}`);
+        void journal("error", `intake failed: ${err?.message ?? err}`);
       }
     }
 
-    // Подключаем источники, указанные в маршрутах: они знают, как слушать свой
-    // мессенджер, как выглядят его вложения и как запретить запись в него.
+    // Attach the sources named by the routes: each one knows how to listen to its
+    // own messenger, what its attachments look like and how to keep us read-only.
     {
       const cfg = readConfig();
       const ids = [...new Set(resolveRoutes(cfg).map((r) => r.source ?? "whatsapp"))];
@@ -498,7 +492,7 @@ export default {
       for (const id of ids) {
         const source = resolveSource(id);
         if (!source) {
-          void journal("error", `источник "${id}" неизвестен; доступные: ${listSources().join(", ")}`);
+          void journal("error", `unknown source "${id}"; available: ${listSources().join(", ")}`);
           continue;
         }
         source.attach({
@@ -517,11 +511,11 @@ export default {
           log,
           journal,
         });
-        void journal("info", `источник подключён: ${source.id}`);
+        void journal("info", `source attached: ${source.id}`);
       }
     }
 
-    // --- временная диагностика: какой хук реально срабатывает на пути группы ---
+    // --- temporary diagnostics: which hook actually fires on the group path ---
     if (readConfig().debugHooks) {
       for (const name of ["inbound_claim", "before_dispatch", "reply_dispatch", "message_sending", "message_sent", "session_start"]) {
         try {
@@ -529,18 +523,18 @@ export default {
             log.info?.(`[hebrew-bridge][hook:${name}] channel=${ctx?.channelId ?? "-"} conv=${ctx?.conversationId ?? "-"} from=${event?.from ?? "-"}`);
           });
         } catch (err) {
-          log.warn?.(`[hebrew-bridge] хук ${name} недоступен: ${err?.message ?? err}`);
+          log.warn?.(`[hebrew-bridge] hook ${name} unavailable: ${err?.message ?? err}`);
         }
       }
     }
 
-    // Самодиагностика чтения картинок: путь к файлу задаётся в конфиге, срабатывает один раз при старте.
+    // Image-reading self-check: the file path comes from the config, runs once at startup.
     const selfTestImage = readConfig().selfTestImage;
     if (selfTestImage) {
       setTimeout(async () => {
         const cfg = readConfig();
         const attempts = [
-          { label: "forced-модель", forced: true },
+          { label: "forced model", forced: true },
         ];
         for (const attempt of attempts) {
           try {
@@ -562,23 +556,23 @@ export default {
                   prompt: buildImageTextPrompt(route),
                 });
             log.info?.(
-              `[hebrew-bridge][самотест] ${attempt.label}: ` +
+              `[hebrew-bridge][self-test] ${attempt.label}: ` +
               `text=${JSON.stringify(String(res?.text ?? "").slice(0, 120))} ` +
               `provider=${res?.provider ?? "-"} model=${res?.model ?? "-"} ` +
               `decision=${JSON.stringify(res?.decision ?? null).slice(0, 300)} ` +
               `output=${JSON.stringify(res?.output ?? null).slice(0, 200)}`
             );
           } catch (err) {
-            log.warn?.(`[hebrew-bridge][самотест] ${attempt.label}: исключение ${err?.message ?? err}`);
+            log.warn?.(`[hebrew-bridge][self-test] ${attempt.label}: exception ${err?.message ?? err}`);
           }
         }
       }, 8000);
     }
 
-    // ---- слежение за квотой подписки -------------------------------------
+    // ---- subscription quota watch --------------------------------------------
     const quotaStateFile = () => join(dataDir(), "quota-state.json");
 
-    /** Состояние предупреждений на диске: перезапуск сервиса не должен слать всё заново. */
+    /** Warning state on disk: a service restart must not re-send everything. */
     const readQuotaState = async () => {
       try {
         return JSON.parse(await readFile(quotaStateFile(), "utf8"));
@@ -591,11 +585,11 @@ export default {
         await ensureDirs();
         await writeFile(quotaStateFile(), JSON.stringify(state, null, 2), "utf8");
       } catch (err) {
-        void journal("warn", `не удалось сохранить состояние квоты: ${err?.message ?? err}`);
+        void journal("warn", `could not save quota state: ${err?.message ?? err}`);
       }
     };
 
-    /** Достаём проценты остатка из ответа gateway или из текста вида "5h 12% left". */
+    /** Pull the remaining percentages out of the gateway reply or text like "5h 12% left". */
     function parseQuota(raw) {
       const text = typeof raw === "string" ? raw : JSON.stringify(raw ?? "");
       const found = [];
@@ -610,7 +604,7 @@ export default {
       if (cfg.quotaWatch === false) return;
       const threshold = cfg.quotaThreshold ?? 20;
 
-      // gateway.request сторонним плагинам запрещён, поэтому спрашиваем через CLI
+      // gateway.request is off limits for third-party plugins, so ask through the CLI
       let raw;
       try {
         const cli = cfg.cliPath ?? join(homedir(), "npm-global", "bin", "openclaw");
@@ -620,17 +614,17 @@ export default {
         });
         raw = res.stdout ?? "";
       } catch (err) {
-        void journal("warn", `не удалось получить статус квоты: ${err?.message ?? err}`);
+        void journal("warn", `could not read quota status: ${err?.message ?? err}`);
         return;
       }
 
       const windows = parseQuota(raw);
       if (windows.length === 0) {
-        void journal("warn", `статус квоты получен, но проценты не распознаны: ${JSON.stringify(raw).slice(0, 300)}`);
+        void journal("warn", `quota status received but no percentages parsed: ${JSON.stringify(raw).slice(0, 300)}`);
         return;
       }
 
-      void journal("info", `квота: ${windows.map((w) => `${w.window} ${w.left}%`).join(" · ")}`);
+      void journal("info", `quota: ${windows.map((w) => `${w.window} ${w.left}%`).join(" · ")}`);
 
       const state = await readQuotaState();
       const repeatMs = (cfg.quotaRepeatHours ?? 6) * 3_600_000;
@@ -642,7 +636,7 @@ export default {
       for (const w of windows) {
         const prev = state[w.window] ?? {};
         if (w.left > threshold + 10) {
-          // квота восстановилась — забываем, чтобы предупредить снова при следующем падении
+          // quota recovered — forget it so the next drop warns again
           if (prev.warnedAt) { delete state[w.window]; changed = true; }
           continue;
         }
@@ -657,66 +651,66 @@ export default {
       if (changed) await writeQuotaState(state);
       if (low.length === 0) return;
 
-      // одно сообщение на все окна сразу, а не по штуке на каждое
+      // one message covering all windows at once, not one per window
       const msg =
-        `⚠️ Заканчивается квота ChatGPT\n\n` +
-        low.map((w) => `• ${w.window}: осталось ${w.left}%`).join("\n") +
-        `\n\nРасшифровка голосовых и чтение картинок могут перестать работать. ` +
-        `Перевод текста продолжит идти через запасные модели.`;
+        `⚠️ ChatGPT quota is running out\n\n` +
+        low.map((w) => `• ${w.window}: ${w.left}% left`).join("\n") +
+        `\n\nVoice transcription and image reading may stop working. ` +
+        `Text translation will keep going through the fallback models.`;
       try {
-        await deliver(msg, { ...(resolveRoutes(cfg)[0] ?? { delivery: "telegram" }), chatId: alertTarget, name: "служебное", threadId: undefined });
-        void journal("warn", `предупреждение о квоте отправлено (${low.map((w) => `${w.window}:${w.left}%`).join(", ")})`);
+        await deliver(msg, { ...(resolveRoutes(cfg)[0] ?? { delivery: "telegram" }), chatId: alertTarget, name: "service", threadId: undefined });
+        void journal("warn", `quota warning sent (${low.map((w) => `${w.window}:${w.left}%`).join(", ")})`);
       } catch (err) {
-        void journal("error", `не удалось отправить предупреждение о квоте: ${err?.message ?? err}`);
+        void journal("error", `could not send the quota warning: ${err?.message ?? err}`);
       }
     }
 
     const quotaTimer = setInterval(() => { void checkQuota(); }, (readConfig().quotaCheckMinutes ?? 30) * 60_000);
     if (typeof quotaTimer.unref === "function") quotaTimer.unref();
-    setTimeout(() => { void checkQuota(); }, 120_000);  // не сразу после старта: рестарты не должны дёргать проверку
+    setTimeout(() => { void checkQuota(); }, 120_000);  // not right after startup: restarts should not trigger the check
 
     {
       const rs = resolveRoutes(readConfig());
       void journal("info",
-        `плагин запущен · маршрутов: ${rs.length}` +
+        `plugin started · routes: ${rs.length}` +
         (rs.length ? " · " + rs.map((r) => `${r.name} → ${r.chatId ?? "?"}${r.threadId ? `#${r.threadId}` : ""}`).join(", ") : "")
       );
     }
     /**
-     * Догнать пропущенное: берём сообщения группы из лога шлюза и прогоняем
-     * через обычный конвейер. Нужно, когда группу подключили задним числом
-     * или сервис какое-то время лежал.
+     * Catch up on what was missed: take the conversation's messages from the gateway
+     * log and push them through the normal pipeline. Needed when a chat is connected
+     * after the fact, or when the service was down for a while.
      */
     async function replayFromLog() {
       const cfg = readConfig();
       const plan = cfg.replay;
       if (!plan?.jid) return;
       try {
-        void journal("info", `догонялка: ищу сообщения ${plan.jid} за ${plan.minutes ?? 120} мин`);
+        void journal("info", `replay: looking for ${plan.jid} messages over the last ${plan.minutes ?? 120} min`);
 
         const route = resolveRoutes(cfg).find((r) => r.jid === plan.jid);
         if (!route) {
-          void journal("warn", `догнать не могу: маршрут ${plan.jid} не настроен`);
+          void journal("warn", `cannot replay: no route configured for ${plan.jid}`);
           return;
         }
 
-        // отметка, до какого момента уже догоняли — иначе каждый перезапуск шлёт заново
+        // watermark of how far we already replayed — otherwise every restart re-sends
         const markFile = join(dataDir(), "replay-state.json");
         let marks = {};
-        try { marks = JSON.parse(await readFile(markFile, "utf8")); } catch { /* первого раза ещё не было */ }
+        try { marks = JSON.parse(await readFile(markFile, "utf8")); } catch { /* no first run yet */ }
 
-        // при перезапуске плагин регистрируется дважды почти одновременно:
-        // занимаем отметку СРАЗУ, иначе обе копии отправят одно и то же
+        // on restart the plugin registers twice almost simultaneously:
+        // claim the watermark IMMEDIATELY, or both copies send the same thing
         const prev = marks[plan.jid] ?? {};
         if (prev.runAt && Date.now() - prev.runAt < 120_000) {
-          void journal("info", "догонялка уже отработала только что — пропускаю");
+          void journal("info", "replay already ran a moment ago — skipping");
           return;
         }
         marks[plan.jid] = { ...prev, runAt: Date.now() };
         try {
           await ensureDirs();
           await writeFile(markFile, JSON.stringify(marks, null, 2), "utf8");
-        } catch { /* не критично */ }
+        } catch { /* not critical */ }
 
         const windowStart = Date.now() - (plan.minutes ?? 120) * 60_000;
         const sinceMs = Math.max(windowStart, prev.lastTs ?? 0);
@@ -740,7 +734,7 @@ export default {
         }
 
         if (found.length === 0) {
-          void journal("info", `догонять нечего: подходящих сообщений не нашлось`);
+          void journal("info", `nothing to replay: no matching messages found`);
           return;
         }
 
@@ -759,20 +753,20 @@ export default {
           await ensureDirs();
           await writeFile(markFile, JSON.stringify(marks, null, 2), "utf8");
         } catch (err) {
-          void journal("warn", `не удалось запомнить отметку догонялки: ${err?.message ?? err}`);
+          void journal("warn", `could not persist the replay watermark: ${err?.message ?? err}`);
         }
 
-        void journal("info", `[${route.name}] догоняем ${w.pending.length} сообщ. из лога`);
+        void journal("info", `[${route.name}] replaying ${w.pending.length} message(s) from the log`);
         scheduleFlush(route);
       } catch (err) {
-        void journal("error", `догонялка упала: ${err?.message ?? err}`);
+        void journal("error", `replay failed: ${err?.message ?? err}`);
       }
     }
 
     setTimeout(() => { void replayFromLog(); }, 15_000);
 
-    // Разведка: может ли плагин получить доступ к провайдеру сам,
-    // чтобы выбирать модель независимо от агента. Ключи не логируем.
+    // Probe: can the plugin reach the provider on its own, so it can pick a model
+    // independently of the agent. Keys are never logged.
     if (readConfig().authProbe) {
       setTimeout(async () => {
         const cfg = readGatewayConfig();
@@ -786,7 +780,7 @@ export default {
             ["getRuntimeAuthForModel", api.runtime.modelAuth?.getRuntimeAuthForModel],
             ["resolveApiKeyForProvider", api.runtime.modelAuth?.resolveApiKeyForProvider],
           ]) {
-            if (typeof fn !== "function") { void journal("info", `[проба] ${label}: метода нет`); continue; }
+            if (typeof fn !== "function") { void journal("info", `[probe] ${label}: method missing`); continue; }
             try {
               const params = label === "resolveApiKeyForProvider"
                 ? { provider: t.provider, cfg }
@@ -794,12 +788,12 @@ export default {
               const res = await fn(params);
               const keys = res && typeof res === "object" ? Object.keys(res) : [];
               void journal("info",
-                `[проба] ${t.provider}/${t.model} · ${label}: mode=${res?.mode ?? "-"} ` +
-                `ключ=${res?.apiKey ? `есть (${String(res.apiKey).length} симв.)` : "нет"} ` +
-                `поля=[${keys.join(",")}]`
+                `[probe] ${t.provider}/${t.model} · ${label}: mode=${res?.mode ?? "-"} ` +
+                `key=${res?.apiKey ? `present (${String(res.apiKey).length} chars)` : "none"} ` +
+                `fields=[${keys.join(",")}]`
               );
             } catch (err) {
-              void journal("warn", `[проба] ${t.provider}/${t.model} · ${label}: ${String(err?.message ?? err).slice(0, 120)}`);
+              void journal("warn", `[probe] ${t.provider}/${t.model} · ${label}: ${String(err?.message ?? err).slice(0, 120)}`);
             }
           }
         }
@@ -807,8 +801,8 @@ export default {
     }
 
     /**
-     * Пополняет реестр увиденных бесед. Журнал шлюза живёт пару суток, поэтому
-     * без этого группа, писавшая на прошлой неделе, опознанию не поддаётся.
+     * Tops up the registry of seen conversations. The gateway log only lives a couple
+     * of days, so without this a chat that last spoke a week ago cannot be identified.
      */
     async function scanForGroups() {
       const cfg = readConfig();
@@ -829,10 +823,10 @@ export default {
 
         await saveRegistry(file, registry);
         if (added > 0) {
-          void journal("info", `реестр бесед пополнен: +${added}, всего ${Object.keys(registry).length}`);
+          void journal("info", `conversation registry updated: +${added}, total ${Object.keys(registry).length}`);
         }
       } catch (err) {
-        void journal("warn", `не удалось обновить реестр бесед: ${err?.message ?? err}`);
+        void journal("warn", `could not update the conversation registry: ${err?.message ?? err}`);
       }
     }
 
@@ -846,6 +840,6 @@ export default {
     void pruneLogs();
     void restoreState();
 
-    log.info?.("[hebrew-bridge] плагин зарегистрирован");
+    log.info?.("[hebrew-bridge] plugin registered");
   },
 };

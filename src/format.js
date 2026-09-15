@@ -34,16 +34,9 @@ export function formatClock(timestamp) {
   });
 }
 
-/** Человеческое имя отправителя: pushName → глоссарий → хвост JID. */
-export function resolveSenderLabel(event, glossary) {
-  const meta = event.metadata ?? {};
-  const raw =
-    meta.pushName ??
-    meta.senderName ??
-    meta.notifyName ??
-    event.senderId ??
-    event.from ??
-    "неизвестный";
+/** Человеческое имя отправителя: как его показал мессенджер → словарь → хвост адреса. */
+export function resolveSenderLabel(msg, glossary) {
+  const raw = msg.senderName ?? msg.senderId ?? "неизвестный";
   const bare = String(raw).split("@")[0].split(":")[0];
   return glossary?.[bare] ?? glossary?.[String(raw)] ?? bare;
 }

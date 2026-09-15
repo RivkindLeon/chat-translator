@@ -23,6 +23,7 @@ import { DEFAULT_PRICES, estimateCostUsd, normalizeModelKey } from "./src/pricin
 import { IMAGE_TEXT_PROMPT, buildSystemPrompt, renderMessagesForPrompt } from "./src/prompts.js";
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
+import { resolveSource, listSources } from "./src/sources/index.js";
 
 export default {
   id: "hebrew-bridge",
@@ -476,110 +477,85 @@ export default {
     }
 
     // ---- приём сообщений ----------------------------------------------------
-    api.on("message_received", async (event, ctx) => {
+    /** Пришло сообщение из наблюдаемой беседы — кладём в её накопитель. */
+    function handleIncoming(msg) {
       try {
         const cfg = readConfig();
-        if (cfg.debugHooks) {
-          log.info?.(`[hebrew-bridge][hook:message_received] channel=${ctx?.channelId} conv=${ctx?.conversationId} from=${event?.from} len=${(event?.content ?? "").length}`);
-        }
-        if (ctx.channelId !== "whatsapp") return;
-
-        const jid = ctx.conversationId ?? event.from ?? "";
-        const route = resolveRoutes(cfg).find((r) => r.jid === jid);
+        const route = resolveRoutes(cfg).find((r) => r.jid === msg.conversationId);
         if (!route) return;
 
-        const sessionKey = ctx.sessionKey ?? event.sessionKey;
-        if (sessionKey) {
-          observedSessions.add(sessionKey);
+        if (msg.sessionKey) {
+          observedSessions.add(msg.sessionKey);
           if (observedSessions.size > 200) {
             observedSessions.delete(observedSessions.values().next().value);
           }
         }
 
-        if (event.metadata?.fromMe === true) return;
-
         const w = worldOf(route.jid);
-        const id = event.messageId ?? ctx.messageId;
-        if (id) {
-          if (w.seenIds.has(id)) return;
-          w.seenIds.add(id);
+        if (msg.messageId) {
+          if (w.seenIds.has(msg.messageId)) return;
+          w.seenIds.add(msg.messageId);
           if (w.seenIds.size > 500) w.seenIds.delete(w.seenIds.values().next().value);
         }
 
-        const text = (event.content ?? "").trim();
-        if (!text) return;
-
         const base = {
-          sender: resolveSenderLabel(event, route.glossary),
-          clock: formatClock(event.timestamp),
-          replyToBody: event.replyToBody ? String(event.replyToBody).slice(0, 120) : "",
+          sender: resolveSenderLabel(msg, route.glossary),
+          clock: formatClock(msg.timestamp),
+          replyToBody: msg.replyToBody ? String(msg.replyToBody).slice(0, 120) : "",
         };
 
-        const media = /^<media:([a-z]+)>$/i.exec(text);
-        if (media) {
-          const { path: mediaPath, mime } = extractMediaFile(event);
-          w.pending.push({
-            ...base,
-            kind: "media",
-            mediaKind: media[1].toLowerCase(),
-            mediaPath,
-            mime,
-            text: "",
-          });
-          if (!mediaPath) {
-            const miss = `[${route.name}] медиа без пути к файлу; ключи метаданных: ${Object.keys(event.metadata ?? {}).join(", ") || "нет"}`;
+        if (msg.kind === "media") {
+          w.pending.push({ ...base, kind: "media", mediaKind: msg.mediaKind, mediaPath: msg.mediaPath, mime: msg.mime, text: "" });
+          if (!msg.mediaPath) {
+            const miss = `[${route.name}] вложение без пути к файлу (${msg.mediaKind})`;
             log.warn?.(`[hebrew-bridge] ${miss}`);
             void journal("warn", miss);
           } else {
-            void journal("info", `[${route.name}] принято медиа ${media[1].toLowerCase()}: ${mediaPath}`);
+            void journal("info", `[${route.name}] принято медиа ${msg.mediaKind}: ${msg.mediaPath}`);
           }
         } else {
-          w.pending.push({ ...base, kind: "text", text });
+          w.pending.push({ ...base, kind: "text", text: msg.text });
         }
 
         scheduleFlush(route);
         scheduleSave();
       } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой в обработчике: ${err?.message ?? err}`);
-        void journal("error", `сбой в обработчике: ${err?.message ?? err}`);
+        log.error?.(`[hebrew-bridge] сбой приёма: ${err?.message ?? err}`);
+        void journal("error", `сбой приёма: ${err?.message ?? err}`);
       }
-    });
+    }
 
-    // Агент не должен даже запускаться на сообщениях читаемых групп:
-    // это и лишние токены, и вектор prompt-injection через чужие сообщения.
-    api.on("before_dispatch", async (event, ctx) => {
-      try {
-        if (readConfig().blockAgent === false) return;
-        const key = event?.sessionKey ?? ctx?.sessionKey;
-        if (!key || !observedSessions.has(key)) return;
-        log.info?.(`[hebrew-bridge] запуск агента подавлен для наблюдаемой сессии`);
-        return { handled: true };
-      } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой блокировки агента: ${err?.message ?? err}`);
-      }
-    });
-
-    // Мы читаем WhatsApp, но НИЧЕГО туда не пишем. Ни в группы, ни в личные чаты:
-    // иначе ассистент отвечает незнакомым людям от имени владельца номера.
-    api.on("message_sending", async (event, ctx) => {
-      try {
-        if (ctx.channelId !== "whatsapp") return;
-        const cfg = readConfig();
-        if (cfg.muteWhatsAppOutbound === false) {
-          // узкий режим: глушим только читаемые группы
-          const target = ctx.conversationId ?? event.to ?? "";
-          if (!resolveRoutes(cfg).some((r) => r.jid === target)) return;
+    // Подключаем источники, указанные в маршрутах: они знают, как слушать свой
+    // мессенджер, как выглядят его вложения и как запретить запись в него.
+    {
+      const cfg = readConfig();
+      const ids = [...new Set(resolveRoutes(cfg).map((r) => r.source ?? "whatsapp"))];
+      const watchedJids = () => new Set(resolveRoutes(readConfig()).map((r) => r.jid));
+      for (const id of ids) {
+        const source = resolveSource(id);
+        if (!source) {
+          void journal("error", `источник "${id}" неизвестен; доступные: ${listSources().join(", ")}`);
+          continue;
         }
-        const target = ctx.conversationId ?? event.to ?? "(неизвестно)";
-        const preview = String(event.content ?? "").slice(0, 80).replace(/\s+/g, " ");
-        log.info?.(`[hebrew-bridge] исходящее в WhatsApp отменено: ${target}`);
-        void journal("warn", `отменено исходящее в WhatsApp → ${target}: "${preview}"`);
-        return { cancel: true, cancelReason: "hebrew-bridge: только чтение" };
-      } catch (err) {
-        log.error?.(`[hebrew-bridge] сбой глушилки: ${err?.message ?? err}`);
-        void journal("error", `сбой глушилки: ${err?.message ?? err}`);
+        source.attach({
+          api,
+          isWatched: (conversationId) => watchedJids().has(conversationId),
+          onMessage: handleIncoming,
+          log,
+          journal,
+          debug: () => readConfig().debugHooks === true,
+        });
+        source.guard({
+          api,
+          isWatchedSession: (key) => observedSessions.has(key),
+          muteOutbound: () => readConfig().muteWhatsAppOutbound !== false,
+          blockAgent: () => readConfig().blockAgent !== false,
+          log,
+          journal,
+        });
+        void journal("info", `источник подключён: ${source.id}`);
       }
-    });
+    }
 
     // --- временная диагностика: какой хук реально срабатывает на пути группы ---
     if (readConfig().debugHooks) {

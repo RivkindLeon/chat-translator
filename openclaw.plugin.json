@@ -212,6 +212,10 @@
             },
             "contextSize": {
               "type": "number"
+            },
+            "source": {
+              "type": "string",
+              "description": "Откуда читать: идентификатор источника (по умолчанию whatsapp)"
             }
           },
           "required": [
@@ -249,6 +253,10 @@
       "authProbe": {
         "type": "boolean",
         "description": "Разовая проверка: доступен ли плагину прямой доступ к провайдерам"
+      },
+      "source": {
+        "type": "string",
+        "description": "Источник по умолчанию для всех маршрутов"
       }
     }
   },

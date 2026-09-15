@@ -1,0 +1,273 @@
+{
+  "id": "hebrew-bridge",
+  "name": "Hebrew Bridge",
+  "description": "Переводит поток сообщений ивритской WhatsApp-группы на русский и доставляет перевод отдельным каналом.",
+  "activation": {
+    "onStartup": true
+  },
+  "enabledByDefault": false,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "groupJid": {
+        "type": "string",
+        "description": "JID основной группы-источника"
+      },
+      "targetLanguage": {
+        "type": "string",
+        "description": "Язык перевода (по умолчанию русский)"
+      },
+      "model": {
+        "type": "string",
+        "description": "Модель для перевода, например openrouter/google/gemini-3.7-flash"
+      },
+      "telegramChatId": {
+        "type": "string",
+        "description": "Chat id в Telegram, куда слать переводы"
+      },
+      "debounceMs": {
+        "type": "number",
+        "description": "Пауза тишины перед отправкой пачки, мс (по умолчанию 20000)"
+      },
+      "maxWaitMs": {
+        "type": "number",
+        "description": "Максимум ожидания при непрерывном потоке, мс (по умолчанию 120000)"
+      },
+      "maxBatch": {
+        "type": "number",
+        "description": "Максимум сообщений в одной пачке (по умолчанию 15)"
+      },
+      "contextSize": {
+        "type": "number",
+        "description": "Сколько предыдущих сообщений передавать как контекст (по умолчанию 10)"
+      },
+      "alertOn": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Слова-триггеры для пометки сообщения флажком"
+      },
+      "glossary": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Словарь: как писать имена и термины по-русски"
+      },
+      "dryRun": {
+        "type": "boolean",
+        "description": "Не отправлять доставку, только писать в лог"
+      },
+      "debugHooks": {
+        "type": "boolean",
+        "description": "Диагностика: логировать все входящие события хуков"
+      },
+      "groupJids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Дополнительные JID групп (например тестовая)"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Агент, чью модель и креды использовать для перевода"
+      },
+      "blockAgent": {
+        "type": "boolean",
+        "description": "Не давать агенту обрабатывать сообщения читаемых групп (по умолчанию да)"
+      },
+      "transcribeVoice": {
+        "type": "boolean",
+        "description": "Расшифровывать голосовые (по умолчанию да)"
+      },
+      "readImages": {
+        "type": "boolean",
+        "description": "Снимать текст с изображений (по умолчанию да)"
+      },
+      "audioLanguage": {
+        "type": "string",
+        "description": "Язык голосовых для распознавания (по умолчанию he)"
+      },
+      "imageProvider": {
+        "type": "string",
+        "description": "Провайдер для чтения картинок, например openai"
+      },
+      "imageModel": {
+        "type": "string",
+        "description": "Модель для чтения картинок, например gpt-5.4-mini"
+      },
+      "audioProvider": {
+        "type": "string",
+        "description": "Провайдер для расшифровки голоса"
+      },
+      "audioModel": {
+        "type": "string",
+        "description": "Модель для расшифровки голоса"
+      },
+      "selfTestImage": {
+        "type": "string",
+        "description": "Путь к картинке для разовой самодиагностики чтения текста при старте"
+      },
+      "dataDir": {
+        "type": "string",
+        "description": "Папка для журналов и учёта расходов (по умолчанию ~/.openclaw/hebrew-bridge)"
+      },
+      "logRetentionDays": {
+        "type": "number",
+        "description": "Сколько дней хранить журналы (по умолчанию 60)"
+      },
+      "prices": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "in": {
+              "type": "number"
+            },
+            "out": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Цены в долларах за миллион токенов, переопределяют встроенные"
+      },
+      "quotaWatch": {
+        "type": "boolean",
+        "description": "Следить за остатком квоты подписки (по умолчанию да)"
+      },
+      "quotaThreshold": {
+        "type": "number",
+        "description": "Порог в процентах, ниже которого приходит предупреждение (по умолчанию 20)"
+      },
+      "quotaCheckMinutes": {
+        "type": "number",
+        "description": "Как часто проверять квоту, минут (по умолчанию 30)"
+      },
+      "cliPath": {
+        "type": "string",
+        "description": "Путь к openclaw CLI для проверки квоты"
+      },
+      "alertChatId": {
+        "type": "string",
+        "description": "Куда слать технические предупреждения (по умолчанию туда же, куда переводы)"
+      },
+      "quotaRepeatHours": {
+        "type": "number",
+        "description": "Не повторять предупреждение о том же окне чаще, чем раз в N часов (по умолчанию 6)"
+      },
+      "imageTimeoutMs": {
+        "type": "number",
+        "description": "Сколько ждать распознавания картинки, мс (по умолчанию 120000)"
+      },
+      "logTexts": {
+        "type": "boolean",
+        "description": "Сохранять тексты (оригинал, распознанное, перевод) для оценки качества"
+      },
+      "routes": {
+        "type": "array",
+        "description": "Группы и куда доставлять их переводы. У каждой свой контекст и словарь.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "jid": {
+              "type": "string",
+              "description": "JID группы-источника"
+            },
+            "name": {
+              "type": "string",
+              "description": "Понятное название для журналов"
+            },
+            "chatId": {
+              "type": "string",
+              "description": "Чат Telegram для доставки"
+            },
+            "threadId": {
+              "type": "string",
+              "description": "Тема в супергруппе (если используется)"
+            },
+            "targetLanguage": {
+              "type": "string",
+              "description": "Язык перевода для этой группы"
+            },
+            "glossary": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Имена и термины именно этой группы"
+            },
+            "debounceMs": {
+              "type": "number"
+            },
+            "maxWaitMs": {
+              "type": "number"
+            },
+            "maxBatch": {
+              "type": "number"
+            },
+            "contextSize": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "jid"
+          ]
+        }
+      },
+      "muteWhatsAppOutbound": {
+        "type": "boolean",
+        "description": "Глушить ВСЕ исходящие в WhatsApp, включая личные чаты (по умолчанию да)"
+      },
+      "replay": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Разовая догонялка: взять сообщения группы из лога и перевести их",
+        "properties": {
+          "jid": {
+            "type": "string",
+            "description": "Группа, чьи сообщения догнать"
+          },
+          "minutes": {
+            "type": "number",
+            "description": "За сколько минут назад (по умолчанию 120)"
+          },
+          "sender": {
+            "type": "string",
+            "description": "Чем подписать отправителя"
+          },
+          "logDir": {
+            "type": "string",
+            "description": "Где лежат логи шлюза"
+          }
+        }
+      },
+      "authProbe": {
+        "type": "boolean",
+        "description": "Разовая проверка: доступен ли плагину прямой доступ к провайдерам"
+      }
+    }
+  },
+  "uiHints": {
+    "groupJid": {
+      "label": "JID группы",
+      "help": "Источник сообщений"
+    },
+    "model": {
+      "label": "Модель",
+      "help": "openrouter/google/gemini-3.7-flash"
+    },
+    "telegramChatId": {
+      "label": "Telegram chat id",
+      "help": "Куда доставлять перевод"
+    },
+    "debounceMs": {
+      "label": "Дебаунс, мс",
+      "help": "Пауза тишины перед отправкой пачки"
+    }
+  }
+}

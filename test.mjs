@@ -1,26 +1,35 @@
 import plugin from "./index.js";
 
-const calls = { llm: [], log: [], auth: [] };
+const calls = { llm: [], log: [], auth: [], stt: [], img: [] };
+let sttReply = "";
+let imgReply = "NO_TEXT";
 let handler = null;
+const handlers = {};
 
 const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.pid}`;
 
+const MAIN_JID = "120363000000000000@g.us";
+
 const pluginConfig = {
   dataDir: TEST_DIR,          // журнал и учёт теста — отдельно от боевых
-  groupJid: "120363000000000000@g.us",
-  telegramChatId: "123456",
-  model: "test/model",
+  routes: [
+    {
+      jid: MAIN_JID,
+      name: "Основная",
+      chatId: "123456",
+      glossary: { "972500000001": "Эйтан", "972500000002": "Мири" },
+    },
+  ],
   debounceMs: 120,
   maxWaitMs: 400,
   maxBatch: 3,
   contextSize: 4,
   dryRun: true,
-  glossary: { "972500000001": "Эйтан", "972500000002": "Мири" },
 };
 
 const api = {
   pluginConfig,
-  on: (name, fn) => { if (name === "message_received") handler = fn; },
+  on: (name, fn) => { handlers[name] = fn; if (name === "message_received") handler = fn; },
   runtime: {
     logging: { getChildLogger: () => ({
       info: (m) => calls.log.push(["info", m]),
@@ -28,10 +37,10 @@ const api = {
       error: (m) => calls.log.push(["error", m]),
     })},
     config: { current: () => ({ channels: { telegram: { botToken: "fake" } } }) },
-    stt: { transcribeAudioFile: async () => ({ text: "" }) },
+    stt: { transcribeAudioFile: async (p) => { calls.stt.push(p); return { text: sttReply }; } },
     mediaUnderstanding: {
-      describeImageFile: async () => ({ text: "NO_TEXT" }),
-      describeImageFileWithModel: async () => ({ text: "NO_TEXT" }),
+      describeImageFile: async (p) => { calls.img.push(p); return { text: imgReply }; },
+      describeImageFileWithModel: async (p) => { calls.img.push(p); return { text: imgReply }; },
     },
     modelAuth: { getApiKeyForModel: async (p) => { calls.auth.push(p); return { apiKey: "test-key", mode: "api-key" }; } },
     llm: { complete: async (p) => {
@@ -44,11 +53,23 @@ const api = {
 plugin.register(api);
 
 const wa = (text, opts = {}) => handler(
-  { content: text, senderId: opts.sender ?? "972500000001@s.whatsapp.net",
+  {
+    content: text,
+    senderId: opts.sender ?? "972500000001@s.whatsapp.net",
     messageId: opts.id ?? Math.random().toString(36).slice(2),
-    timestamp: 1787856471, metadata: opts.metadata ?? { pushName: opts.push },
-    replyToBody: opts.replyToBody },
-  { channelId: "whatsapp", conversationId: opts.jid ?? pluginConfig.groupJid }
+    timestamp: 1787856471,
+    sessionKey: opts.sessionKey,
+    replyToBody: opts.replyToBody,
+    metadata: opts.metadata ?? {
+      pushName: opts.push,
+      ...(opts.mediaPath ? { mediaPath: opts.mediaPath, mediaType: opts.mime } : {}),
+    },
+  },
+  {
+    channelId: "whatsapp",
+    conversationId: opts.jid ?? MAIN_JID,
+    sessionKey: opts.sessionKey,
+  }
 );
 
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
@@ -182,6 +203,108 @@ console.log("\n— своя модель на маршрут —");
     await completeForRoute({ route: { name: "кривая", model: "неизвестный/модель" }, api, messages: [] });
   } catch (err) { failed = err; }
   check("неизвестный провайдер даёт понятную ошибку", /обращаться не умеет/.test(String(failed?.message)));
+}
+
+console.log("\n— у каждой группы свой мир —");
+{
+  const second = "120363222222222222@g.us";
+  pluginConfig.routes.push({ jid: second, name: "Вторая", chatId: "999" });
+  pluginConfig.dryRun = false;
+  const sent = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return { ok: true, text: async () => "" }; };
+
+  calls.llm.length = 0;
+  await wa("сообщение первой", { id: "iso-1" });
+  await wa("сообщение второй", { id: "iso-2", jid: second });
+  await wait(400);
+
+  check("две группы — два отдельных вызова модели", calls.llm.length === 2);
+  const a = calls.llm.find((c) => c.messages[0].content.includes("первой"));
+  const b = calls.llm.find((c) => c.messages[0].content.includes("второй"));
+  check("сообщения групп не смешались в одной пачке", Boolean(a && b) && a !== b);
+  check("словарь применился только к своей группе", a.systemPrompt.includes("Эйтан") && !b.systemPrompt.includes("Эйтан"));
+  const chats = sent.map((s) => String(s.chat_id));
+  check(`каждая группа ушла в свой чат (${chats.join(", ")})`, chats.includes("123456") && chats.includes("999"));
+
+  globalThis.fetch = origFetch;
+  pluginConfig.dryRun = true;
+  pluginConfig.routes.pop();
+}
+
+console.log("\n— в читаемый мессенджер ничего не пишем —");
+{
+  const out = (target, channel = "whatsapp") =>
+    handlers["message_sending"]({ to: target, content: "ответ ассистента" }, { channelId: channel, conversationId: target });
+  check("ответ в читаемую группу отменён", (await out(MAIN_JID))?.cancel === true);
+  check("личный чат тоже закрыт", (await out("972500000009@s.whatsapp.net"))?.cancel === true);
+  check("посторонняя группа закрыта", (await out("120363999999999999@g.us"))?.cancel === true);
+  check("доставка переводов не затронута", !(await out("-100123", "telegram"))?.cancel);
+}
+
+console.log("\n— ассистент не запускается на читаемых сообщениях —");
+{
+  const dispatch = (key) => handlers["before_dispatch"]({ sessionKey: key, content: "x" }, { sessionKey: key });
+  await wa("шалом", { id: "agent-1", sessionKey: "wa:watched" });
+  check("на читаемой беседе запуск подавлен", (await dispatch("wa:watched"))?.handled === true);
+  check("чужие беседы не трогаем", !(await dispatch("wa:someone-else"))?.handled);
+  await wait(300);
+}
+
+console.log("\n— голосовые и картинки —");
+{
+  calls.llm.length = 0; calls.stt.length = 0; calls.img.length = 0;
+  sttReply = "שלום, נתראה מחר";
+  await wa("<media:audio>", { id: "v-1", mediaPath: "/tmp/a.ogg", mime: "audio/ogg" });
+  await wait(350);
+  check("голосовое отправлено на расшифровку", calls.stt.length === 1);
+  check("путь к файлу передан", calls.stt[0]?.filePath === "/tmp/a.ogg");
+  const voiced = calls.llm[0]?.messages[0].content ?? "";
+  check("расшифровка ушла в перевод", voiced.includes("נתראה מחר"));
+  check("помечено как голосовое", voiced.includes("🎤"));
+
+  calls.llm.length = 0; calls.img.length = 0;
+  imgReply = "הודעה חשובה להורים";
+  await wa("<media:image>", { id: "i-1", mediaPath: "/tmp/x.jpg", mime: "image/jpeg" });
+  await wait(350);
+  check("картинка отправлена на чтение", calls.img.length === 1);
+  check("текст с картинки ушёл в перевод", (calls.llm[0]?.messages[0].content ?? "").includes("הודעה חשובה"));
+
+  calls.llm.length = 0;
+  imgReply = "NO_TEXT";
+  await wa("<media:image>", { id: "i-2", mediaPath: "/tmp/kids.jpg" });
+  await wait(350);
+  check("фото без текста не идёт в модель", calls.llm.length === 0);
+
+  calls.llm.length = 0;
+  const brokenStt = api.runtime.stt.transcribeAudioFile;
+  api.runtime.stt.transcribeAudioFile = async () => { throw new Error("stt недоступен"); };
+  await wa("<media:audio>", { id: "v-2", mediaPath: "/tmp/b.ogg" });
+  await wait(350);
+  check("сбой распознавания не теряет сообщение", calls.log.some(([, m]) => String(m).includes("голосов")));
+  check("причина сбоя записана", calls.log.some(([lvl, m]) => lvl === "warn" && String(m).includes("stt недоступен")));
+  api.runtime.stt.transcribeAudioFile = brokenStt;
+  sttReply = "";
+}
+
+console.log("\n— сбой сети не теряет перевод и не переводит заново —");
+{
+  pluginConfig.dryRun = false;
+  calls.llm.length = 0;
+  let fails = 2;
+  const delivered = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (fails-- > 0) throw new Error("fetch failed");
+    delivered.push(JSON.parse(init.body).text);
+    return { ok: true, text: async () => "" };
+  };
+  await wa("סבבה", { id: "net-1" });
+  await wait(6500);
+  check("перевод запрошен один раз, несмотря на сбои", calls.llm.length === 1);
+  check("сообщение всё-таки доставлено", delivered.length === 1);
+  globalThis.fetch = origFetch;
+  pluginConfig.dryRun = true;
 }
 
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);

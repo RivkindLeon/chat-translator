@@ -15,6 +15,7 @@ export function resolveRoutes(cfg) {
       .map((r, i) => ({
         jid: r.jid,
         source: r.source ?? cfg.source ?? "whatsapp",
+        delivery: r.delivery ?? cfg.delivery ?? "telegram",
         name: r.name ?? `группа ${i + 1}`,
         chatId: r.chatId ?? cfg.telegramChatId,
         threadId: r.threadId,
@@ -34,6 +35,7 @@ export function resolveRoutes(cfg) {
   return legacy.map((jid, i) => ({
     jid,
     source: cfg.source ?? "whatsapp",
+    delivery: cfg.delivery ?? "telegram",
     name: i === 0 ? "основная группа" : `группа ${i + 1}`,
     chatId: cfg.telegramChatId,
     threadId: undefined,

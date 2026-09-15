@@ -216,6 +216,10 @@
             "source": {
               "type": "string",
               "description": "Откуда читать: идентификатор источника (по умолчанию whatsapp)"
+            },
+            "delivery": {
+              "type": "string",
+              "description": "Куда доставлять: идентификатор получателя (по умолчанию telegram)"
             }
           },
           "required": [
@@ -257,6 +261,10 @@
       "source": {
         "type": "string",
         "description": "Источник по умолчанию для всех маршрутов"
+      },
+      "delivery": {
+        "type": "string",
+        "description": "Получатель по умолчанию для всех маршрутов"
       }
     }
   },

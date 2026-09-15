@@ -24,6 +24,7 @@ import { IMAGE_TEXT_PROMPT, buildSystemPrompt, renderMessagesForPrompt } from ".
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
 import { resolveSource, listSources } from "./src/sources/index.js";
+import { deliverText } from "./src/delivery/index.js";
 
 export default {
   id: "hebrew-bridge",
@@ -203,7 +204,7 @@ export default {
     const flushUndelivered = async (route, w) => {
       while (w.undelivered.length > 0) {
         try {
-          await deliver(w.undelivered[0], route.chatId, route.threadId);
+          await deliver(w.undelivered[0], route);
           w.undelivered.shift();
         } catch (err) {
           void journal("warn", `[${route.name}] очередь доставки ждёт (${w.undelivered.length} шт.): ${err?.message ?? err}`);
@@ -217,58 +218,16 @@ export default {
       if (w.hardTimer) { clearTimeout(w.hardTimer); w.hardTimer = null; }
     };
 
-    // ---- доставка -----------------------------------------------------------
-    async function deliver(text, target, threadId) {
+    /** Доставка перевода по маршруту; в тестовом режиме только пишем в журнал. */
+    async function deliver(text, route) {
       const cfg = readConfig();
       if (cfg.dryRun) {
         log.info?.(`[hebrew-bridge] dry-run, доставка пропущена:\n${text}`);
         return;
       }
-
-      const chatId = target ?? cfg.telegramChatId;
-      const token = readGatewayConfig()?.channels?.telegram?.botToken;
-      if (!chatId || !token) {
-        log.warn?.("[hebrew-bridge] не настроены telegramChatId или botToken — доставка невозможна");
-        return;
-      }
-
-      for (const chunk of splitForDelivery(text)) {
-        let lastErr;
-        for (let attempt = 1; attempt <= 3; attempt += 1) {
-          try {
-            const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: chatId,
-                text: chunk,
-                disable_web_page_preview: true,
-                ...(threadId ? { message_thread_id: Number(threadId) } : {}),
-              }),
-            });
-            if (!res.ok) {
-              const body = await res.text().catch(() => "");
-              // 4xx — наша вина (неверный chat_id, бот выкинут); повторять бессмысленно
-              const permanent = res.status >= 400 && res.status < 500;
-              const err = new Error(`Telegram ответил ${res.status}: ${body.slice(0, 200)}`);
-              if (permanent) throw err;
-              throw Object.assign(err, { retriable: true });
-            }
-            lastErr = undefined;
-            break;
-          } catch (err) {
-            lastErr = err;
-            const retriable = err?.retriable === true || /fetch failed|ECONN|ETIMEDOUT|ENOTFOUND|socket/i.test(String(err?.message ?? err));
-            if (!retriable || attempt === 3) break;
-            log.warn?.(`[hebrew-bridge] доставка: попытка ${attempt} не удалась (${err?.message ?? err}), повтор`);
-            await new Promise((r) => setTimeout(r, attempt * 1500));
-          }
-        }
-        if (lastErr) throw lastErr;
-      }
+      await deliverText({ text, route, gatewayConfig: readGatewayConfig(), log, journal });
     }
 
-    // ---- перевод пачки ------------------------------------------------------
     async function enrichMedia(items, route) {
       const cfg = readConfig();
       const gatewayCfg = readGatewayConfig();
@@ -388,7 +347,7 @@ export default {
         if (textItems.length === 0) {
           if (mediaLines.length > 0) {
             try {
-              await deliver(mediaLines.join("\n\n"), route.chatId, route.threadId);
+              await deliver(mediaLines.join("\n\n"), route);
             } catch (err) {
               w.undelivered.push(mediaLines.join("\n\n"));
               void journal("error", `[${route.name}] доставка не удалась: ${err?.message ?? err}`);
@@ -425,7 +384,7 @@ export default {
 
         const payload = [translated, ...mediaLines].join("\n\n");
         try {
-          await deliver(payload, route.chatId, route.threadId);
+          await deliver(payload, route);
         } catch (err) {
           w.undelivered.push(payload);
           void journal("error", `[${route.name}] доставка не удалась, поставлено в очередь: ${err?.message ?? err}`);
@@ -700,7 +659,7 @@ export default {
         `\n\nРасшифровка голосовых и чтение картинок могут перестать работать. ` +
         `Перевод текста продолжит идти через запасные модели.`;
       try {
-        await deliver(msg, alertTarget);
+        await deliver(msg, { ...(resolveRoutes(cfg)[0] ?? { delivery: "telegram" }), chatId: alertTarget, name: "служебное", threadId: undefined });
         void journal("warn", `предупреждение о квоте отправлено (${low.map((w) => `${w.window}:${w.left}%`).join(", ")})`);
       } catch (err) {
         void journal("error", `не удалось отправить предупреждение о квоте: ${err?.message ?? err}`);

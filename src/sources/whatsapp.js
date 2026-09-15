@@ -1,3 +1,6 @@
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+
 import { extractMediaFile } from "../media.js";
 
 /**
@@ -99,5 +102,63 @@ export default {
         void journal("error", `сбой глушилки: ${err?.message ?? err}`);
       }
     });
+  },
+
+  /**
+   * Находит беседы этого мессенджера в журнале шлюза.
+   *
+   * Нужно, чтобы вообще узнать, какие группы существуют: названий мессенджер
+   * не сообщает, а события неподключённых бесед до плагина не доходят. Журнал
+   * шлюза живёт пару суток, поэтому увиденное складывается в свой реестр.
+   */
+  async discover({ logDir = "/tmp/openclaw", maxFiles = 3 } = {}) {
+    let files = [];
+    try {
+      files = (await readdir(logDir))
+        .filter((f) => f.startsWith("openclaw-") && f.endsWith(".log"))
+        .sort()
+        .slice(-maxFiles);
+    } catch {
+      return [];
+    }
+
+    const found = new Map();
+    for (const file of files) {
+      let text = "";
+      try {
+        text = await readFile(join(logDir, file), "utf8");
+      } catch {
+        continue;
+      }
+      for (const line of text.split("\n")) {
+        if (!line.includes("@g.us")) continue;
+        let row;
+        try {
+          row = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const info = row?.["1"];
+        const from = typeof info === "object" ? info?.from : undefined;
+        if (typeof from !== "string" || !from.endsWith("@g.us")) continue;
+
+        const seen = found.get(from) ?? { conversationId: from, count: 0, lastSeen: "", samples: [] };
+        seen.count += 1;
+        const at = row?.time ?? "";
+        if (at > seen.lastSeen) seen.lastSeen = at;
+
+        // обрывок нужен только чтобы человек узнал свою группу
+        let body = String(info?.body ?? "").replace(/\s+/g, " ").trim();
+        // служебные обёртки шлюза опознанию не помогают
+        if (/^\[[A-Za-z]+\s/.test(body)) body = "";
+        const media = /^<media:(\w+)>$/.exec(body);
+        if (media) body = `(${media[1]})`;
+        if (body && seen.samples.length < 3 && !seen.samples.includes(body)) {
+          seen.samples.push(body.slice(0, 60));
+        }
+        found.set(from, seen);
+      }
+    }
+    return [...found.values()];
   },
 };

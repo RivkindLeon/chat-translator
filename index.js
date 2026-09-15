@@ -24,6 +24,7 @@ import { buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt }
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
 import { resolveSource, listSources } from "./src/sources/index.js";
+import { loadRegistry, saveRegistry, mergeObservations, registryPath } from "./src/registry.js";
 import { deliverText } from "./src/delivery/index.js";
 
 export default {
@@ -799,6 +800,43 @@ export default {
           }
         }
       }, 12_000);
+    }
+
+    /**
+     * Пополняет реестр увиденных бесед. Журнал шлюза живёт пару суток, поэтому
+     * без этого группа, писавшая на прошлой неделе, опознанию не поддаётся.
+     */
+    async function scanForGroups() {
+      const cfg = readConfig();
+      if (cfg.groupRegistry === false) return;
+      try {
+        const file = registryPath(dataDir());
+        let registry = await loadRegistry(file);
+        let added = 0;
+
+        for (const id of listSources()) {
+          const source = resolveSource(id);
+          if (typeof source?.discover !== "function") continue;
+          const seen = await source.discover({ logDir: cfg.logDir });
+          const before = Object.keys(registry).length;
+          registry = mergeObservations(registry, seen, { source: id });
+          added += Object.keys(registry).length - before;
+        }
+
+        await saveRegistry(file, registry);
+        if (added > 0) {
+          void journal("info", `реестр бесед пополнен: +${added}, всего ${Object.keys(registry).length}`);
+        }
+      } catch (err) {
+        void journal("warn", `не удалось обновить реестр бесед: ${err?.message ?? err}`);
+      }
+    }
+
+    {
+      const everyMinutes = readConfig().groupScanMinutes ?? 60;
+      const timer = setInterval(() => { void scanForGroups(); }, everyMinutes * 60_000);
+      if (typeof timer.unref === "function") timer.unref();
+      setTimeout(() => { void scanForGroups(); }, 45_000);
     }
 
     void pruneLogs();

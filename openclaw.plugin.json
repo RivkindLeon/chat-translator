@@ -343,6 +343,18 @@
       "locale": {
         "type": "string",
         "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
+      },
+      "groupRegistry": {
+        "type": "boolean",
+        "description": "Вести реестр увиденных бесед (по умолчанию да)"
+      },
+      "groupScanMinutes": {
+        "type": "number",
+        "description": "Как часто обходить журнал в поисках бесед, минут (по умолчанию 60)"
+      },
+      "logDir": {
+        "type": "string",
+        "description": "Где лежит журнал шлюза (по умолчанию /tmp/openclaw)"
       }
     }
   },

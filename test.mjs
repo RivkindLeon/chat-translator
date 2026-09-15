@@ -133,6 +133,23 @@ console.log("\n— время берётся из настроек —");
   check("неверный пояс не роняет перевод", /^\d{2}:\d{2}$/.test(formatClock(t0, { timeZone: "Нет/Такого" })));
 }
 
+console.log("\n— реестр бесед —");
+{
+  const { mergeObservations } = await import("./src/registry.js");
+  const first = mergeObservations({}, [
+    { conversationId: "a@g.us", count: 3, lastSeen: "2026-09-01T10:00:00Z", samples: ["привет"] },
+  ], { source: "whatsapp" });
+  check("новая беседа попала в реестр", first["a@g.us"]?.count === 3);
+
+  const later = mergeObservations(first, [
+    { conversationId: "a@g.us", count: 1, lastSeen: "2026-09-10T10:00:00Z", samples: ["ещё"] },
+  ], { source: "whatsapp" });
+  check("старые образцы не потерялись", later["a@g.us"].samples.includes("привет") && later["a@g.us"].samples.includes("ещё"));
+  check("счётчик не уменьшился при коротком журнале", later["a@g.us"].count === 3);
+  check("дата последнего сообщения обновилась", later["a@g.us"].lastSeen.startsWith("2026-09-10"));
+  check("первая встреча запомнена", later["a@g.us"].firstSeen.startsWith("2026-09-01"));
+}
+
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);
 await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

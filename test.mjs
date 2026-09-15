@@ -83,7 +83,8 @@ const p2 = calls.llm[0].messages[0].content;
 check("предыдущая пачка попала в контекст", p2.includes("КОНТЕКСТ"));
 check("имя из глоссария подставлено", p2.includes("Эйтан"));
 check("второй участник распознан", p2.includes("Мири"));
-check("системный промпт содержит правила", calls.llm[0].systemPrompt.includes("ПРАВИЛА"));
+check("системный промпт содержит правила", calls.llm[0].systemPrompt.includes("RULES"));
+check("язык перевода подставлен", calls.llm[0].systemPrompt.includes(pluginConfig.targetLanguage ?? "Russian"));
 check("модель не навязывается плагином", calls.llm[0].model === undefined);
 
 console.log("\n— maxBatch режет пачку —");
@@ -112,13 +113,15 @@ check("ошибка залогирована", calls.log.some(([lvl, m]) => lvl 
 console.log("\n— пачка фотографий не раздувает сообщение —");
 calls.llm.length = 0; calls.log.length = 0;
 pluginConfig.maxBatch = 20;              // 12 фото должны попасть в одну пачку
+pluginConfig.labelsPlural = { image: { icon: "📷", word: "фото" } };   // подписи задаёт пользователь
 for (let i = 0; i < 12; i += 1) {
   await wa("<media:image>", { id: `flood-${i}` });
 }
 await wait(400);
 const note = calls.log.map(([, m]) => String(m)).join(" | ");
 check("двенадцать фото свернулись в одну строку", note.includes("12 фото"));
-check("не осталось повторяющихся блоков", !note.includes("📷 изображение"));
+check("не осталось повторяющихся блоков", !note.includes("📷 image"));
+check("подпись взята из настроек, а не зашита", note.includes("фото") && !note.includes("photos"));
 pluginConfig.maxBatch = 3;
 
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);

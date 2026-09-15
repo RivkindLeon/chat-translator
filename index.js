@@ -20,7 +20,7 @@ const execFileAsync = promisify(execFile);
 
 import { DEFAULTS, resolveRoutes } from "./src/config.js";
 import { DEFAULT_PRICES, estimateCostUsd, normalizeModelKey } from "./src/pricing.js";
-import { IMAGE_TEXT_PROMPT, buildSystemPrompt, renderMessagesForPrompt } from "./src/prompts.js";
+import { buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt } from "./src/prompts.js";
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
 import { resolveSource, listSources } from "./src/sources/index.js";
@@ -278,7 +278,7 @@ export default {
                   ...(item.mime ? { mime: item.mime } : {}),
                   provider: cfg.imageProvider,
                   model: cfg.imageModel,
-                  prompt: IMAGE_TEXT_PROMPT,
+                  prompt: buildImageTextPrompt(route),
                   maxTokens: 1500,
                   timeoutMs: cfg.imageTimeoutMs ?? 120_000,
                 })
@@ -286,7 +286,7 @@ export default {
                   filePath: item.mediaPath,
                   cfg: gatewayCfg,
                   ...(item.mime ? { mime: item.mime } : {}),
-                  prompt: IMAGE_TEXT_PROMPT,
+                  prompt: buildImageTextPrompt(route),
                 });
             const text = (res?.text ?? "").trim();
             const iu = res?.usage ?? {};
@@ -341,7 +341,7 @@ export default {
 
       const textItems = batch.filter((m) => m.kind !== "media");
       const mediaItems = batch.filter((m) => m.kind === "media");
-      const mediaLines = renderMediaNotes(mediaItems);
+      const mediaLines = renderMediaNotes(mediaItems, route.labels, route.labelsPlural);
 
       try {
         if (textItems.length === 0) {
@@ -364,7 +364,7 @@ export default {
         const userContent = `${contextBlock}ПЕРЕВЕДИ ЭТИ СООБЩЕНИЯ\n${renderMessagesForPrompt(textItems)}`;
 
         const result = await api.runtime.llm.complete({
-          systemPrompt: buildSystemPrompt(route),
+          systemPrompt: buildTranslationPrompt(route),
           messages: [{ role: "user", content: userContent }],
           maxTokens: 2000,
           temperature: 0.2,
@@ -546,7 +546,7 @@ export default {
                   mime: "image/jpeg",
                   provider: cfg.imageProvider ?? "openai",
                   model: cfg.imageModel ?? "gpt-5.4-mini",
-                  prompt: IMAGE_TEXT_PROMPT,
+                  prompt: buildImageTextPrompt(route),
                   maxTokens: 1500,
                   timeoutMs: cfg.imageTimeoutMs ?? 120_000,
                 })
@@ -554,7 +554,7 @@ export default {
                   filePath: selfTestImage,
                   cfg: readGatewayConfig(),
                   mime: "image/jpeg",
-                  prompt: IMAGE_TEXT_PROMPT,
+                  prompt: buildImageTextPrompt(route),
                 });
             log.info?.(
               `[hebrew-bridge][самотест] ${attempt.label}: ` +

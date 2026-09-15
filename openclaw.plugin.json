@@ -16,7 +16,7 @@
       },
       "targetLanguage": {
         "type": "string",
-        "description": "Язык перевода (по умолчанию русский)"
+        "description": "Язык перевода, по-английски для подсказки модели: Russian, English, German…"
       },
       "model": {
         "type": "string",
@@ -192,7 +192,7 @@
             },
             "targetLanguage": {
               "type": "string",
-              "description": "Язык перевода для этой группы"
+              "description": "Язык перевода, по-английски для подсказки модели: Russian, English, German…"
             },
             "glossary": {
               "type": "object",
@@ -220,6 +220,37 @@
             "delivery": {
               "type": "string",
               "description": "Куда доставлять: идентификатор получателя (по умолчанию telegram)"
+            },
+            "sourceLanguage": {
+              "type": "string",
+              "description": "Язык сообщений в источнике, по-английски: Hebrew, Arabic… (можно не указывать)"
+            },
+            "ownerName": {
+              "type": "string",
+              "description": "Чьи упоминания помечать флажком ⚑"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Подписи вложений на нужном языке: image, audio, video, document, sticker"
+            },
+            "labelsPlural": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "icon": {
+                    "type": "string"
+                  },
+                  "word": {
+                    "type": "string"
+                  }
+                }
+              },
+              "description": "Как называть вложения во множественном числе: image: {icon, word}"
             }
           },
           "required": [
@@ -265,6 +296,37 @@
       "delivery": {
         "type": "string",
         "description": "Получатель по умолчанию для всех маршрутов"
+      },
+      "sourceLanguage": {
+        "type": "string",
+        "description": "Язык сообщений в источнике, по-английски: Hebrew, Arabic… (можно не указывать)"
+      },
+      "ownerName": {
+        "type": "string",
+        "description": "Чьи упоминания помечать флажком ⚑"
+      },
+      "labels": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "description": "Подписи вложений на нужном языке: image, audio, video, document, sticker"
+      },
+      "labelsPlural": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "icon": {
+              "type": "string"
+            },
+            "word": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Как называть вложения во множественном числе: image: {icon, word}"
       }
     }
   },

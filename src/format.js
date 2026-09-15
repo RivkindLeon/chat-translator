@@ -23,15 +23,28 @@ export function splitForDelivery(text, limit = TELEGRAM_LIMIT) {
   return parts;
 }
 
-export function formatClock(timestamp) {
+/**
+ * Время сообщения в заголовке.
+ *
+ * Часовой пояс и формат берутся из настроек: сервер может стоять где угодно,
+ * а читать переводы будут там, где живут участники чата. По умолчанию —
+ * круглосуточный формат и часовой пояс машины.
+ */
+export function formatClock(timestamp, opts = {}) {
   const ms = typeof timestamp === "number"
     ? (timestamp > 1e12 ? timestamp : timestamp * 1000)
     : Date.now();
-  return new Date(ms).toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jerusalem",
-  });
+
+  try {
+    return new Date(ms).toLocaleTimeString(opts.locale ?? "en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      ...(opts.timeZone ? { timeZone: opts.timeZone } : {}),
+    });
+  } catch {
+    // неверный часовой пояс или язык не должны ронять перевод
+    return new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
 }
 
 /** Человеческое имя отправителя: как его показал мессенджер → словарь → хвост адреса. */

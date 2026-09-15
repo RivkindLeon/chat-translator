@@ -459,7 +459,7 @@ export default {
 
         const base = {
           sender: resolveSenderLabel(msg, route.glossary),
-          clock: formatClock(msg.timestamp),
+          clock: formatClock(msg.timestamp, { timeZone: route.timeZone, locale: route.locale }),
           replyToBody: msg.replyToBody ? String(msg.replyToBody).slice(0, 120) : "",
         };
 
@@ -741,7 +741,7 @@ export default {
 
         const w = worldOf(route.jid);
         for (const m of found) {
-          const base = { sender: plan.sender ?? "—", clock: formatClock(m.ts), replyToBody: "" };
+          const base = { sender: plan.sender ?? "—", clock: formatClock(m.ts, { timeZone: route.timeZone, locale: route.locale }), replyToBody: "" };
           const media = /^<media:([a-z]+)>$/i.exec(m.body);
           if (media) {
             w.pending.push({ ...base, kind: "media", mediaKind: media[1].toLowerCase(), mediaPath: m.mediaPath, mime: m.mime, text: "" });

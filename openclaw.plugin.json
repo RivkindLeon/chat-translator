@@ -251,6 +251,14 @@
                 }
               },
               "description": "Как называть вложения во множественном числе: image: {icon, word}"
+            },
+            "timeZone": {
+              "type": "string",
+              "description": "Часовой пояс времени в заголовках, например Asia/Jerusalem (по умолчанию пояс сервера)"
+            },
+            "locale": {
+              "type": "string",
+              "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
             }
           },
           "required": [
@@ -327,6 +335,14 @@
           }
         },
         "description": "Как называть вложения во множественном числе: image: {icon, word}"
+      },
+      "timeZone": {
+        "type": "string",
+        "description": "Часовой пояс времени в заголовках, например Asia/Jerusalem (по умолчанию пояс сервера)"
+      },
+      "locale": {
+        "type": "string",
+        "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
       }
     }
   },

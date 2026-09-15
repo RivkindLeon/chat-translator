@@ -124,6 +124,15 @@ check("не осталось повторяющихся блоков", !note.inc
 check("подпись взята из настроек, а не зашита", note.includes("фото") && !note.includes("photos"));
 pluginConfig.maxBatch = 3;
 
+console.log("\n— время берётся из настроек —");
+{
+  const { formatClock } = await import("./src/format.js");
+  const t0 = 1788086845;
+  check("часовой пояс применяется", formatClock(t0, { timeZone: "Asia/Jerusalem" }) !== formatClock(t0, { timeZone: "America/New_York" }));
+  check("формат применяется", formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("AM") || formatClock(t0, { timeZone: "UTC", locale: "en-US" }).includes("PM"));
+  check("неверный пояс не роняет перевод", /^\d{2}:\d{2}$/.test(formatClock(t0, { timeZone: "Нет/Такого" })));
+}
+
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);
 await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

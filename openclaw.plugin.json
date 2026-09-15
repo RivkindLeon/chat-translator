@@ -259,6 +259,10 @@
             "locale": {
               "type": "string",
               "description": "Формат времени, например ru-RU или en-GB (по умолчанию круглосуточный)"
+            },
+            "model": {
+              "type": "string",
+              "description": "Своя модель для этого маршрута, вида провайдер/модель (например openrouter/google/gemini-3.7-flash). Без неё используется модель агента."
             }
           },
           "required": [
@@ -355,6 +359,10 @@
       "logDir": {
         "type": "string",
         "description": "Где лежит журнал шлюза (по умолчанию /tmp/openclaw)"
+      },
+      "routeModel": {
+        "type": "string",
+        "description": "Модель по умолчанию для всех маршрутов (провайдер/модель)"
       }
     }
   },

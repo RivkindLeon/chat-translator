@@ -26,6 +26,7 @@ import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.
 import { resolveSource, listSources } from "./src/sources/index.js";
 import { loadRegistry, saveRegistry, mergeObservations, registryPath } from "./src/registry.js";
 import { deliverText } from "./src/delivery/index.js";
+import { completeForRoute } from "./src/models/index.js";
 
 export default {
   id: "hebrew-bridge",
@@ -364,7 +365,10 @@ export default {
           : "";
         const userContent = `${contextBlock}ПЕРЕВЕДИ ЭТИ СООБЩЕНИЯ\n${renderMessagesForPrompt(textItems)}`;
 
-        const result = await api.runtime.llm.complete({
+        const result = await completeForRoute({
+          route,
+          api,
+          gatewayConfig: readGatewayConfig(),
           systemPrompt: buildTranslationPrompt(route),
           messages: [{ role: "user", content: userContent }],
           maxTokens: 2000,

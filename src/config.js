@@ -16,6 +16,7 @@ export function resolveRoutes(cfg) {
         jid: r.jid,
         source: r.source ?? cfg.source ?? "whatsapp",
         delivery: r.delivery ?? cfg.delivery ?? "telegram",
+        model: r.model ?? cfg.routeModel,
         name: r.name ?? `группа ${i + 1}`,
         chatId: r.chatId ?? cfg.telegramChatId,
         threadId: r.threadId,

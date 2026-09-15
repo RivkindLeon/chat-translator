@@ -1,6 +1,6 @@
 import plugin from "./index.js";
 
-const calls = { llm: [], log: [] };
+const calls = { llm: [], log: [], auth: [] };
 let handler = null;
 
 const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.pid}`;
@@ -33,6 +33,7 @@ const api = {
       describeImageFile: async () => ({ text: "NO_TEXT" }),
       describeImageFileWithModel: async () => ({ text: "NO_TEXT" }),
     },
+    modelAuth: { getApiKeyForModel: async (p) => { calls.auth.push(p); return { apiKey: "test-key", mode: "api-key" }; } },
     llm: { complete: async (p) => {
       calls.llm.push(p);
       return { text: "[перевод пачки]", model: p.model, usage: { inputTokens: 100, outputTokens: 50 } };
@@ -148,6 +149,39 @@ console.log("\n— реестр бесед —");
   check("счётчик не уменьшился при коротком журнале", later["a@g.us"].count === 3);
   check("дата последнего сообщения обновилась", later["a@g.us"].lastSeen.startsWith("2026-09-10"));
   check("первая встреча запомнена", later["a@g.us"].firstSeen.startsWith("2026-09-01"));
+}
+
+console.log("\n— своя модель на маршрут —");
+{
+  const { completeForRoute } = await import("./src/models/index.js");
+
+  calls.llm.length = 0;
+  await completeForRoute({ route: { name: "без модели" }, api, systemPrompt: "s", messages: [] });
+  check("без указания модели идём через OpenClaw", calls.llm.length === 1);
+
+  calls.auth.length = 0;
+  const sent = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url, body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({ choices: [{ message: { content: "перевод" } }], model: "m", usage: { prompt_tokens: 10, completion_tokens: 5 } }) };
+  };
+  const res = await completeForRoute({
+    route: { name: "со своей", model: "openrouter/some/model" },
+    api, systemPrompt: "s", messages: [{ role: "user", content: "x" }],
+  });
+  globalThis.fetch = origFetch;
+
+  check("доступ запрошен у OpenClaw, а не хранится у нас", calls.auth[0]?.model?.provider === "openrouter");
+  check("модель передана без имени провайдера", sent[0]?.body?.model === "some/model");
+  check("перевод получен напрямую", res.text === "перевод");
+  check("расход посчитан", res.usage.inputTokens === 10 && res.usage.outputTokens === 5);
+
+  let failed;
+  try {
+    await completeForRoute({ route: { name: "кривая", model: "неизвестный/модель" }, api, messages: [] });
+  } catch (err) { failed = err; }
+  check("неизвестный провайдер даёт понятную ошибку", /обращаться не умеет/.test(String(failed?.message)));
 }
 
 console.log(failures === 0 ? "\nвсе проверки пройдены\n" : `\nпровалено проверок: ${failures}\n`);

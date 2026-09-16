@@ -36,8 +36,19 @@ export default {
 
     const body = await res.text().catch(() => "");
     const err = new Error(`Telegram replied ${res.status}: ${body.slice(0, 200)}`);
-    // 4xx is our own fault (wrong address, bot removed) — retrying is pointless
-    if (res.status >= 400 && res.status < 500) throw err;
+
+    // 429 is a rate limit, not a mistake: it is exactly what a queue draining
+    // after an outage runs into, and waiting is the correct answer.
+    if (res.status === 429) {
+      let retryAfterMs;
+      try { retryAfterMs = (JSON.parse(body)?.parameters?.retry_after ?? 0) * 1000 || undefined; } catch { /* body is not JSON */ }
+      throw Object.assign(err, { retriable: true, retryAfterMs });
+    }
+
+    // Any other 4xx is our own fault (wrong address, bot removed): retrying will
+    // never help, so the caller must set the message aside instead of blocking on it.
+    if (res.status >= 400 && res.status < 500) throw Object.assign(err, { permanent: true });
+
     throw Object.assign(err, { retriable: true });
   },
 };

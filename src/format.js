@@ -9,7 +9,10 @@ export function splitForDelivery(text, limit = TELEGRAM_LIMIT) {
     // a single line longer than the limit has to be cut mid-way
     if (line.length > limit) {
       if (current) { parts.push(current); current = ""; }
-      for (let i = 0; i < line.length; i += limit) parts.push(line.slice(i, i + limit));
+      // slice by code points, not UTF-16 units: cutting at the limit mid-emoji
+      // would push a lone surrogate and the recipient would reject the message
+      const chars = Array.from(line);
+      for (let i = 0; i < chars.length; i += limit) parts.push(chars.slice(i, i + limit).join(""));
       continue;
     }
     if ((current ? current.length + 1 : 0) + line.length > limit) {

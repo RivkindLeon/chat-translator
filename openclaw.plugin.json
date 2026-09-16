@@ -119,6 +119,10 @@
         "type": "number",
         "description": "How many days to keep the journals (default 60)"
       },
+      "sampleRetentionDays": {
+        "type": "number",
+        "description": "How many days to keep the saved texts in samples/ (default 7)"
+      },
       "prices": {
         "type": "object",
         "additionalProperties": {

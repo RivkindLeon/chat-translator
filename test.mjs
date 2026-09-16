@@ -1,10 +1,13 @@
 import plugin from "./index.js";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const calls = { llm: [], log: [], auth: [], stt: [], img: [] };
 let sttReply = "";
 let imgReply = "NO_TEXT";
 let handler = null;
 const handlers = {};
+let onCalls = 0;
 
 const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.pid}`;
 
@@ -29,7 +32,7 @@ const pluginConfig = {
 
 const api = {
   pluginConfig,
-  on: (name, fn) => { handlers[name] = fn; if (name === "message_received") handler = fn; },
+  on: (name, fn) => { onCalls += 1; handlers[name] = fn; if (name === "message_received") handler = fn; },
   runtime: {
     logging: { getChildLogger: () => ({
       info: (m) => calls.log.push(["info", m]),
@@ -305,6 +308,118 @@ console.log("\n— a network failure loses nothing and never re-translates —")
   check("message delivered in the end", delivered.length === 1);
   globalThis.fetch = origFetch;
   pluginConfig.dryRun = true;
+}
+
+
+console.log("\n— an empty answer from the model must not swallow the batch —");
+{
+  calls.llm.length = 0;
+  const realComplete = api.runtime.llm.complete;
+  let firstCall = true;
+  api.runtime.llm.complete = async (par) => {
+    calls.llm.push(par);
+    if (firstCall) { firstCall = false; return { text: "   ", model: par.model, usage: {} }; }
+    return { text: "[batch translation]", model: par.model, usage: {} };
+  };
+
+  await wa("הודעה חשובה", { id: "empty-1" });
+  await wait(900);
+
+  check("the batch was translated again, not dropped", calls.llm.length === 2);
+  check("the original message survived", (calls.llm[1]?.messages[0].content ?? "").includes("הודעה חשובה"));
+  api.runtime.llm.complete = realComplete;
+}
+
+console.log("\n— an undelivered translation leaves without waiting for new messages —");
+{
+  pluginConfig.dryRun = false;
+  const delivered = [];
+  const origFetch = globalThis.fetch;
+  let offline = true;
+  globalThis.fetch = async (url, init) => {
+    if (offline) throw new Error("telegram is down");   // not retriable: straight to the queue
+    delivered.push(JSON.parse(init.body).text);
+    return { ok: true, text: async () => "" };
+  };
+
+  await wa("ערב טוב", { id: "queue-1" });
+  await wait(500);
+  check("the failed delivery went into the queue", delivered.length === 0);
+
+  offline = false;                       // nobody writes in the group any more
+  await wait(900);
+  check("the queue drained on its own", delivered.length === 1);
+
+  globalThis.fetch = origFetch;
+  pluginConfig.dryRun = true;
+}
+
+console.log("\n— a permanently rejected message does not wedge the queue —");
+{
+  pluginConfig.dryRun = false;
+  const delivered = [];
+  const origFetch = globalThis.fetch;
+  const realComplete = api.runtime.llm.complete;
+  let answer = "STUCK-A";
+  api.runtime.llm.complete = async (par) => { calls.llm.push(par); return { text: answer, model: par.model, usage: {} }; };
+
+  globalThis.fetch = async (url, init) => {
+    const text = JSON.parse(init.body).text;
+    if (text.includes("STUCK")) return { ok: false, status: 403, text: async () => '{"description":"bot was kicked"}' };
+    delivered.push(text);
+    return { ok: true, text: async () => "" };
+  };
+
+  await wa("aleph", { id: "stuck-1" });
+  await wait(500);
+  answer = "GOOD-B";
+  await wa("bet", { id: "stuck-2" });
+  await wait(900);
+
+  check("the message behind the stuck one got through", delivered.some((t) => t.includes("GOOD-B")));
+  const setAside = await readFile(join(TEST_DIR, "undeliverable.jsonl"), "utf8").catch(() => "");
+  check("the rejected message was set aside, not destroyed", setAside.includes("STUCK-A"));
+
+  api.runtime.llm.complete = realComplete;
+  globalThis.fetch = origFetch;
+  pluginConfig.dryRun = true;
+}
+
+console.log("\n— delivery adapter tells apart a rate limit from a mistake —");
+{
+  const telegram = (await import("./src/delivery/telegram.js")).default;
+  const origFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => ({ ok: false, status: 429, text: async () => '{"parameters":{"retry_after":7}}' });
+  let rateLimited;
+  try { await telegram.sendChunk({ auth: "x", target: "1", text: "y" }); } catch (err) { rateLimited = err; }
+  check("429 counts as temporary", rateLimited?.retriable === true);
+  check("retry_after is honoured", rateLimited?.retryAfterMs === 7000);
+
+  globalThis.fetch = async () => ({ ok: false, status: 403, text: async () => "" });
+  let rejected;
+  try { await telegram.sendChunk({ auth: "x", target: "1", text: "y" }); } catch (err) { rejected = err; }
+  check("403 counts as permanent", rejected?.permanent === true);
+  check("403 is not retried", rejected?.retriable !== true);
+
+  globalThis.fetch = origFetch;
+}
+
+console.log("\n— long text is never cut through a character —");
+{
+  const { splitForDelivery } = await import("./src/format.js");
+  const line = "🎉".repeat(40);
+  const parts = splitForDelivery(line, 10);
+  const lone = (t) => /[\uD800-\uDBFF]$/.test(t) || /^[\uDC00-\uDFFF]/.test(t);
+  check("nothing was lost when splitting", parts.join("") === line);
+  check("no piece ends in half a character", !parts.some(lone));
+}
+
+console.log("\n— the plugin registers once per process —");
+{
+  const before = onCalls;
+  plugin.register(api);
+  check("the second registration is ignored", onCalls === before);
 }
 
 console.log(failures === 0 ? "\nall checks passed\n" : `\nfailed checks: ${failures}\n`);

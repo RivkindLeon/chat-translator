@@ -28,12 +28,27 @@ import { loadRegistry, saveRegistry, mergeObservations, registryPath } from "./s
 import { deliverText } from "./src/delivery/index.js";
 import { completeForRoute } from "./src/models/index.js";
 
+// The gateway registers the plugin twice on a restart. Module scope is shared
+// between those calls (ESM caches the module), so a flag here is what stops the
+// second copy from raising its own timers, hooks and buffers — two independent
+// deduplicators cannot see each other, and every message goes out twice.
+let registered = false;
+
 export default {
   id: "hebrew-bridge",
   name: "Hebrew Bridge",
   description: "Translates a watched chat into your language and forwards it to a destination",
 
   register(api) {
+    if (registered) {
+      try {
+        api.runtime.logging.getChildLogger({ plugin: "hebrew-bridge" })
+          .warn?.("[hebrew-bridge] register() called twice in one process — ignoring the second call");
+      } catch { /* logging is optional */ }
+      return;
+    }
+    registered = true;
+
     let log;
     try {
       log = api.runtime.logging.getChildLogger({ plugin: "hebrew-bridge" });
@@ -89,20 +104,28 @@ export default {
       }
     };
 
-    /** Prunes old journals; usage records stay, they are the accounting trail. */
+    /**
+     * Prunes old journals; usage records stay, they are the accounting trail.
+     * `samples/` is pruned on a much shorter clock: it holds other people's
+     * conversations verbatim, so it is the one folder that must not accumulate.
+     */
     const pruneLogs = async () => {
-      try {
-        const days = readConfig().logRetentionDays ?? 60;
-        const dir = join(dataDir(), "logs");
-        const cutoff = Date.now() - days * 86_400_000;
-        for (const name of await readdir(dir)) {
-          const file = join(dir, name);
-          const info = await stat(file);
-          if (info.mtimeMs < cutoff) await unlink(file);
+      const cfg = readConfig();
+      const sweep = async (folder, days) => {
+        try {
+          const dir = join(dataDir(), folder);
+          const cutoff = Date.now() - days * 86_400_000;
+          for (const name of await readdir(dir)) {
+            const file = join(dir, name);
+            const info = await stat(file);
+            if (info.mtimeMs < cutoff) await unlink(file);
+          }
+        } catch {
+          // the folder may not exist yet
         }
-      } catch {
-        // the folder may not exist yet
-      }
+      };
+      await sweep("logs", cfg.logRetentionDays ?? 60);
+      await sweep("samples", cfg.sampleRetentionDays ?? 7);
     };
 
     const readConfig = () => {
@@ -132,6 +155,7 @@ export default {
           recentContext: [],
           seenIds: new Set(),
           undelivered: [],
+          failures: 0,          // consecutive failed flushes — drives the backoff
           debounceTimer: null,
           hardTimer: null,
           flushing: false,
@@ -203,10 +227,38 @@ export default {
           await deliver(w.undelivered[0], route);
           w.undelivered.shift();
         } catch (err) {
+          // A permanent rejection (bot removed, address changed) would otherwise
+          // wedge the head of the queue forever and everything behind it with it.
+          // Set that one message aside on disk and carry on with the rest.
+          if (err?.permanent === true) {
+            const dropped = w.undelivered.shift();
+            await setAside(route, dropped, err);
+            continue;
+          }
           void journal("warn", `[${route.name}] delivery queue waiting (${w.undelivered.length}): ${err?.message ?? err}`);
           return;
         }
       }
+    };
+
+    /** Nothing paid for is ever destroyed: it goes to a file we can read later. */
+    const setAside = async (route, text, err) => {
+      const line = JSON.stringify({
+        ts: new Date().toISOString(),
+        route: route.name,
+        chatId: route.chatId ?? null,
+        reason: String(err?.message ?? err).slice(0, 300),
+        text,
+      });
+      try {
+        await ensureDirs();
+        await appendFile(join(dataDir(), "undeliverable.jsonl"), `${line}\n`, "utf8");
+      } catch (writeErr) {
+        void journal("error", `could not set the message aside: ${writeErr?.message ?? writeErr}`);
+      }
+      const msg = `[${route.name}] delivery permanently rejected, message set aside in undeliverable.jsonl: ${String(err?.message ?? err).slice(0, 120)}`;
+      log.error?.(`[hebrew-bridge] ${msg}`);
+      void journal("error", msg);
     };
 
     const clearTimers = (w) => {
@@ -325,14 +377,26 @@ export default {
 
     async function flush(route) {
       const w = worldOf(route.jid);
-      if (w.flushing || w.pending.length === 0) return;
+      if (w.flushing) return;
+      // Undelivered translations are already paid for. Leaving them behind an
+      // "is there anything new?" check meant they sat on disk until someone
+      // happened to write in the group again.
+      if (w.pending.length === 0 && w.undelivered.length === 0) return;
       w.flushing = true;
       clearTimers(w);
 
       const cfg = readConfig();
-      const batch = w.pending.splice(0, route.maxBatch);
 
       await flushUndelivered(route, w);
+
+      if (w.pending.length === 0) {
+        w.flushing = false;
+        void saveState();
+        if (w.undelivered.length > 0) scheduleFlush(route);
+        return;
+      }
+
+      const batch = w.pending.splice(0, route.maxBatch);
       await enrichMedia(batch, route);
 
       const textItems = batch.filter((m) => m.kind !== "media");
@@ -372,7 +436,12 @@ export default {
 
         const translated = (result?.text ?? "").trim();
         if (!translated) {
-          void journal("warn", `[${route.name}] the model returned nothing, batch skipped`);
+          // The batch was already cut out of the queue. Without putting it back
+          // the messages are gone for good — and an empty answer is routine
+          // (a max_tokens cut-off, a refusal, a content filter).
+          w.pending.unshift(...batch);
+          w.failures += 1;
+          void journal("warn", `[${route.name}] the model returned nothing, batch put back (attempt ${w.failures})`);
           return;
         }
 
@@ -389,6 +458,7 @@ export default {
           void journal("error", `[${route.name}] delivery failed, queued: ${err?.message ?? err}`);
         }
 
+        w.failures = 0;
         w.recentContext.push(...batch);
         while (w.recentContext.length > route.contextSize) w.recentContext.shift();
 
@@ -415,23 +485,39 @@ export default {
         });
       } catch (err) {
         w.pending.unshift(...batch);
+        w.failures += 1;
         log.error?.(`[hebrew-bridge] [${route.name}] translation failed: ${err?.message ?? err}`);
         void journal("error", `[${route.name}] translation failed: ${err?.message ?? err}`);
       } finally {
         w.flushing = false;
         void saveState();
-        if (w.pending.length > 0) scheduleFlush(route);
+        if (w.pending.length > 0 || w.undelivered.length > 0) scheduleFlush(route);
       }
+    }
+
+    const MAX_RETRY_DELAY_MS = 30 * 60_000;
+
+    /**
+     * Normally the batch leaves after a pause in the conversation. After a
+     * failure the pause doubles each time, up to half an hour: a provider that
+     * is down for an hour used to mean ~180 identical attempts, each of which
+     * re-ran the transcription of whatever voice message failed with it.
+     */
+    function retryDelay(route, w) {
+      if (w.failures === 0) return route.debounceMs;
+      return Math.min(route.debounceMs * 2 ** Math.min(w.failures, 8), MAX_RETRY_DELAY_MS);
     }
 
     function scheduleFlush(route) {
       const w = worldOf(route.jid);
+      const delay = retryDelay(route, w);
       if (w.debounceTimer) clearTimeout(w.debounceTimer);
-      w.debounceTimer = setTimeout(() => { void flush(route); }, route.debounceMs);
-      if (!w.hardTimer) {
+      w.debounceTimer = setTimeout(() => { void flush(route); }, delay);
+      if (!w.hardTimer && w.failures === 0) {
         w.hardTimer = setTimeout(() => { void flush(route); }, route.maxWaitMs);
       }
-      if (w.pending.length >= route.maxBatch) void flush(route);
+      // A full batch normally goes out at once — but not while we are backing off.
+      if (w.failures === 0 && w.pending.length >= route.maxBatch) void flush(route);
     }
 
     // ---- message intake ------------------------------------------------------
@@ -533,6 +619,9 @@ export default {
     if (selfTestImage) {
       setTimeout(async () => {
         const cfg = readConfig();
+        // `route` is not in scope here — the self-check threw ReferenceError on
+        // every run and reported it as "the model cannot read images".
+        const probeRoute = resolveRoutes(cfg)[0] ?? {};
         const attempts = [
           { label: "forced model", forced: true },
         ];
@@ -545,7 +634,7 @@ export default {
                   mime: "image/jpeg",
                   provider: cfg.imageProvider ?? "openai",
                   model: cfg.imageModel ?? "gpt-5.4-mini",
-                  prompt: buildImageTextPrompt(route),
+                  prompt: buildImageTextPrompt(probeRoute),
                   maxTokens: 1500,
                   timeoutMs: cfg.imageTimeoutMs ?? 120_000,
                 })
@@ -553,7 +642,7 @@ export default {
                   filePath: selfTestImage,
                   cfg: readGatewayConfig(),
                   mime: "image/jpeg",
-                  prompt: buildImageTextPrompt(route),
+                  prompt: buildImageTextPrompt(probeRoute),
                 });
             log.info?.(
               `[hebrew-bridge][self-test] ${attempt.label}: ` +
@@ -658,7 +747,10 @@ export default {
         `\n\nVoice transcription and image reading may stop working. ` +
         `Text translation will keep going through the fallback models.`;
       try {
-        await deliver(msg, { ...(resolveRoutes(cfg)[0] ?? { delivery: "telegram" }), chatId: alertTarget, name: "service", threadId: undefined });
+        const fallbackRoute = resolveRoutes(cfg)[0] ?? { delivery: "telegram" };
+        // alertTarget may well be unset; writing it in blindly used to overwrite
+        // the working address from the route with undefined.
+        await deliver(msg, { ...fallbackRoute, chatId: alertTarget ?? fallbackRoute.chatId, name: "service", threadId: undefined });
         void journal("warn", `quota warning sent (${low.map((w) => `${w.window}:${w.left}%`).join(", ")})`);
       } catch (err) {
         void journal("error", `could not send the quota warning: ${err?.message ?? err}`);

@@ -16,10 +16,18 @@ import { promisify } from "node:util";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
+// The deploy puts this file both in tools/ and next to the plugin itself, so
+// `src/` is either one level up or right here. Look for it rather than assume.
 const here = dirname(fileURLToPath(import.meta.url));
-const { resolveSource, listSources } = await import(join(here, "..", "src", "sources", "index.js"));
-const { listDeliveries } = await import(join(here, "..", "src", "delivery", "index.js"));
+const srcDir = [join(here, "..", "src"), join(here, "src")].find((d) => existsSync(join(d, "sources", "index.js")));
+if (!srcDir) {
+  console.error("Cannot find the plugin's src/ folder next to this script.");
+  process.exit(1);
+}
+const { resolveSource, listSources } = await import(join(srcDir, "sources", "index.js"));
+const { listDeliveries } = await import(join(srcDir, "delivery", "index.js"));
 
 const run = promisify(execFile);
 

@@ -108,7 +108,7 @@ They live in `~/.openclaw/openclaw.json`, section
 | `glossary` | how to spell names and terms; can be set globally and per route |
 | `targetLanguage` | the language to translate into, written in English |
 | `sourceLanguage` | the language of the source messages (optional) |
-| `source` / `delivery` | which source and delivery adapter to use |
+| `source` / `delivery` | which source and delivery adapter to use (`whatsapp`; `telegram` or `webhook`) |
 | `model` | a dedicated model, as `provider/model`; without it the agent model is used |
 | `timeZone` / `locale` | time zone and format for the message headers |
 | `imageProvider` / `imageModel` | what reads text off images |
@@ -118,6 +118,15 @@ They live in `~/.openclaw/openclaw.json`, section
 
 Any route setting overrides the global one: a chatty group can have its own
 delay, a work group its own glossary.
+
+With `delivery: "webhook"` the route's `chatId` is the full `https://` URL —
+that is how Slack, Discord, n8n and Zapier hand out incoming webhooks, so the
+secret is already inside the address and nothing else needs configuring.
+
+Paths that differ from machine to machine can also come from the environment
+rather than the config: `OPENCLAW_LOG_DIR` and `OPENCLAW_CLI` for the plugin,
+plus `OPENCLAW_EXTENSIONS`, `OPENCLAW_SERVICE`, `OPENCLAW_RESTART_CMD` and
+`OPENCLAW_GATEWAY_URL` for `deploy.sh`.
 
 ---
 

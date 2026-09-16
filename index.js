@@ -33,11 +33,22 @@ import { completeForRoute } from "./src/models/index.js";
 // second copy from raising its own timers, hooks and buffers — two independent
 // deduplicators cannot see each other, and every message goes out twice.
 let registered = false;
+let teardown = null;
 
 export default {
   id: "hebrew-bridge",
   name: "Hebrew Bridge",
   description: "Translates a watched chat into your language and forwards it to a destination",
+
+  /**
+   * Stops everything this plugin started. OpenClaw has no documented lifecycle
+   * hook today, so nothing is known to call this — it exists so a host that
+   * reloads plugins can stop our timers instead of leaving a second copy
+   * ticking beside the first.
+   */
+  dispose() {
+    try { teardown?.(); } finally { teardown = null; registered = false; }
+  },
 
   register(api) {
     if (registered) {
@@ -48,6 +59,10 @@ export default {
       return;
     }
     registered = true;
+
+    // Every long-lived timer goes in here so dispose() can stop them all.
+    const timers = new Set();
+    const track = (t) => { timers.add(t); return t; };
 
     let log;
     try {
@@ -617,7 +632,7 @@ export default {
     // Image-reading self-check: the file path comes from the config, runs once at startup.
     const selfTestImage = readConfig().selfTestImage;
     if (selfTestImage) {
-      setTimeout(async () => {
+      track(setTimeout(async () => {
         const cfg = readConfig();
         // `route` is not in scope here — the self-check threw ReferenceError on
         // every run and reported it as "the model cannot read images".
@@ -655,7 +670,7 @@ export default {
             log.warn?.(`[hebrew-bridge][self-test] ${attempt.label}: exception ${err?.message ?? err}`);
           }
         }
-      }, 8000);
+      }, 8000));
     }
 
     // ---- subscription quota watch --------------------------------------------
@@ -696,7 +711,7 @@ export default {
       // gateway.request is off limits for third-party plugins, so ask through the CLI
       let raw;
       try {
-        const cli = cfg.cliPath ?? join(homedir(), "npm-global", "bin", "openclaw");
+        const cli = cfg.cliPath ?? process.env.OPENCLAW_CLI ?? join(homedir(), "npm-global", "bin", "openclaw");
         const res = await execFileAsync(cli, ["models", "status"], {
           timeout: 120_000,
           maxBuffer: 8 * 1024 * 1024,
@@ -757,9 +772,9 @@ export default {
       }
     }
 
-    const quotaTimer = setInterval(() => { void checkQuota(); }, (readConfig().quotaCheckMinutes ?? 30) * 60_000);
+    const quotaTimer = track(setInterval(() => { void checkQuota(); }, (readConfig().quotaCheckMinutes ?? 30) * 60_000));
     if (typeof quotaTimer.unref === "function") quotaTimer.unref();
-    setTimeout(() => { void checkQuota(); }, 120_000);  // not right after startup: restarts should not trigger the check
+    track(setTimeout(() => { void checkQuota(); }, 120_000));  // not right after startup: restarts should not trigger the check
 
     {
       const rs = resolveRoutes(readConfig());
@@ -806,7 +821,7 @@ export default {
 
         const windowStart = Date.now() - (plan.minutes ?? 120) * 60_000;
         const sinceMs = Math.max(windowStart, prev.lastTs ?? 0);
-        const dir = plan.logDir ?? "/tmp/openclaw";
+        const dir = plan.logDir ?? cfg.logDir ?? process.env.OPENCLAW_LOG_DIR ?? "/tmp/openclaw";
         const files = (await readdir(dir)).filter((f) => f.startsWith("openclaw-")).sort().slice(-2);
 
         const found = [];
@@ -855,12 +870,12 @@ export default {
       }
     }
 
-    setTimeout(() => { void replayFromLog(); }, 15_000);
+    track(setTimeout(() => { void replayFromLog(); }, 15_000));
 
     // Probe: can the plugin reach the provider on its own, so it can pick a model
     // independently of the agent. Keys are never logged.
     if (readConfig().authProbe) {
-      setTimeout(async () => {
+      track(setTimeout(async () => {
         const cfg = readGatewayConfig();
         const targets = [
           { provider: "openrouter", model: "google/gemini-3.7-flash" },
@@ -889,7 +904,7 @@ export default {
             }
           }
         }
-      }, 12_000);
+      }, 12_000));
     }
 
     /**
@@ -907,7 +922,7 @@ export default {
         for (const id of listSources()) {
           const source = resolveSource(id);
           if (typeof source?.discover !== "function") continue;
-          const seen = await source.discover({ logDir: cfg.logDir });
+          const seen = await source.discover({ logDir: cfg.logDir ?? process.env.OPENCLAW_LOG_DIR });
           const before = Object.keys(registry).length;
           registry = mergeObservations(registry, seen, { source: id });
           added += Object.keys(registry).length - before;
@@ -924,13 +939,19 @@ export default {
 
     {
       const everyMinutes = readConfig().groupScanMinutes ?? 60;
-      const timer = setInterval(() => { void scanForGroups(); }, everyMinutes * 60_000);
+      const timer = track(setInterval(() => { void scanForGroups(); }, everyMinutes * 60_000));
       if (typeof timer.unref === "function") timer.unref();
-      setTimeout(() => { void scanForGroups(); }, 45_000);
+      track(setTimeout(() => { void scanForGroups(); }, 45_000));
     }
 
     void pruneLogs();
     void restoreState();
+
+    teardown = () => {
+      for (const t of timers) { clearTimeout(t); clearInterval(t); }
+      timers.clear();
+      for (const w of worlds.values()) clearTimers(w);
+    };
 
     log.info?.("[hebrew-bridge] plugin registered");
   },

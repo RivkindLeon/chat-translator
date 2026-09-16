@@ -441,6 +441,44 @@ console.log("\n— the source adapter owns its channel setup —");
   check("a bad identifier is recognised", wa.looksLikeConversationId("not-an-id") === false);
 }
 
+
+console.log("\n— a second recipient keeps the same contract —");
+{
+  const { resolveDelivery, listDeliveries } = await import("./src/delivery/index.js");
+  check("two recipients ship", listDeliveries().includes("telegram") && listDeliveries().includes("webhook"));
+
+  const hook = resolveDelivery("webhook");
+  check("this one stores no credentials", hook.resolveAuth() === null);
+  check("it carries its own size limit", hook.limit !== 4096);
+
+  const origFetch = globalThis.fetch;
+  let sent;
+  globalThis.fetch = async (url, init) => { sent = { url, body: JSON.parse(init.body) }; return { ok: true }; };
+  await hook.sendChunk({ target: "https://example.com/hook", text: "שלום" });
+  check("the route address is the URL itself", sent.url === "https://example.com/hook");
+  check("Slack and Discord field names both go out", sent.body.text === "שלום" && sent.body.content === "שלום");
+
+  let refused;
+  try { await hook.sendChunk({ target: "http://insecure.example", text: "x" }); } catch (err) { refused = err; }
+  check("a non-https address is refused for good", refused?.permanent === true);
+
+  globalThis.fetch = async () => ({ ok: false, status: 429, headers: { get: () => "3" }, text: async () => "" });
+  let limited;
+  try { await hook.sendChunk({ target: "https://example.com/hook", text: "x" }); } catch (err) { limited = err; }
+  check("429 is temporary here too", limited?.retriable === true && limited?.retryAfterMs === 3000);
+
+  globalThis.fetch = origFetch;
+}
+
+console.log("\n— dispose lets the plugin start over —");
+{
+  plugin.dispose();
+  const before = onCalls;
+  plugin.register(api);
+  check("registration works again after dispose", onCalls > before);
+  plugin.dispose();
+}
+
 console.log(failures === 0 ? "\nall checks passed\n" : `\nfailed checks: ${failures}\n`);
 await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

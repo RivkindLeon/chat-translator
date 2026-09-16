@@ -1,8 +1,9 @@
 import telegram from "./telegram.js";
+import webhook from "./webhook.js";
 import { splitForDelivery } from "../format.js";
 
 /** Where translations go. Adding a recipient means dropping a file in here. */
-const DELIVERIES = [telegram];
+const DELIVERIES = [telegram, webhook];
 
 export function resolveDelivery(id) {
   return DELIVERIES.find((d) => d.id === (id ?? "telegram"));

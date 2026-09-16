@@ -14,6 +14,24 @@ export default {
   id: "whatsapp",
   channelId: "whatsapp",
 
+  /** What a conversation identifier looks like here, for the sake of typos. */
+  looksLikeConversationId: (id) => /@g\.us$/.test(id),
+
+  /** An example to print when the identifier does not look right. */
+  conversationIdExample: "120363000000000000@g.us",
+
+  /**
+   * Makes the gateway hand this conversation's messages to plugins at all.
+   * Every messenger gates that differently, so the knowledge belongs here and
+   * not in the tool that connects a chat.
+   */
+  prepareChannel(gatewayConfig, conversationId) {
+    gatewayConfig.channels ??= {};
+    gatewayConfig.channels.whatsapp ??= {};
+    gatewayConfig.channels.whatsapp.groups ??= {};
+    gatewayConfig.channels.whatsapp.groups[conversationId] = { requireMention: false };
+  },
+
   /**
    * Subscribes to incoming messages and hands them over in a normalised shape.
    *

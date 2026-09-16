@@ -42,7 +42,7 @@ restarts the gateway.
 
 ```bash
 node tools/groups.mjs     # which groups the server has seen, with message fragments
-node tools/add-group.mjs <JID> "Name" <chatId>
+node tools/add-group.mjs <id> "Name" <address> [--source=… --delivery=…]
 node tools/limits.mjs     # remaining subscription quota
 node tools/report.mjs     # spending for the month
 ```
@@ -53,10 +53,17 @@ node tools/report.mjs     # spending for the month
 
 ## Status
 
-Running in a personal setup across several groups. Work is under way to make it
-usable by other people: decoupling from a specific messenger on both the input
-and the output side, an arbitrary language pair, settings instead of hardcoded
-values.
+Running in a personal setup across several groups.
+
+The decoupling work is done: the messenger it reads, the place it delivers to,
+the language pair and the presentation all come from settings rather than from
+the code. One source adapter (WhatsApp) and one delivery adapter (Telegram) ship
+today — adding another means writing a file in `src/sources/` or `src/delivery/`,
+not editing the engine.
+
+What that does not yet cover: the install assumes an OpenClaw gateway already
+running on your own server, and no second adapter has been written, so the
+interfaces are reasonable rather than proven.
 
 ## License
 

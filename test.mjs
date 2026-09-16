@@ -422,6 +422,25 @@ console.log("\n— the plugin registers once per process —");
   check("the second registration is ignored", onCalls === before);
 }
 
+
+console.log("\n— the source adapter owns its channel setup —");
+{
+  const { resolveSource } = await import("./src/sources/index.js");
+  const wa = resolveSource("whatsapp");
+  check("the adapter knows how to open its channel", typeof wa.prepareChannel === "function");
+
+  const gatewayCfg = {};
+  wa.prepareChannel(gatewayCfg, "120363111111111111@g.us");
+  check("the conversation was written into the channel settings",
+    gatewayCfg.channels?.whatsapp?.groups?.["120363111111111111@g.us"]?.requireMention === false);
+
+  wa.prepareChannel(gatewayCfg, "120363222222222222@g.us");
+  check("an existing conversation is not wiped by the next one",
+    Object.keys(gatewayCfg.channels.whatsapp.groups).length === 2);
+
+  check("a bad identifier is recognised", wa.looksLikeConversationId("not-an-id") === false);
+}
+
 console.log(failures === 0 ? "\nall checks passed\n" : `\nfailed checks: ${failures}\n`);
 await (await import("node:fs/promises")).rm(TEST_DIR, { recursive: true, force: true }).catch(() => {});
 process.exit(failures === 0 ? 0 : 1);

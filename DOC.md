@@ -63,7 +63,7 @@ All of them run on the server, in the plugin directory
 
 ```bash
 node groups.mjs        # which groups the server has seen, with message fragments
-node add-group.mjs <JID> "Name" [chatId] [threadId]
+node add-group.mjs <id> "Name" [address] [thread] [--source=… --delivery=…]
 node limits.mjs        # remaining subscription quota and the current models
 node report.mjs        # spending for the month (2026-09 · all · --days)
 node test.mjs          # 53 logic checks
@@ -83,7 +83,9 @@ Call accounting: `~/.openclaw/hebrew-bridge/usage.jsonl`
    the bot.
 3. Find the chat id:
    `grep "skipping group message" /tmp/openclaw/openclaw-*.log`
-4. `node add-group.mjs <JID> "Name" <chatId>` — adds it and restarts.
+4. `node add-group.mjs <id> "Name" <address>` — adds it and restarts.
+   For a different messenger or destination add `--source=` / `--delivery=`;
+   the tool asks the adapter what its channel needs instead of assuming WhatsApp.
 
 If a group is connected after the fact, its recent messages can be caught up on:
 temporarily set `replay: {jid, minutes}` in the settings, restart, then remove

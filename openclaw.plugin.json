@@ -279,6 +279,10 @@
             "includeOwnMessages": {
               "type": "boolean",
               "description": "Also translate the messages you send yourself in this conversation — only useful for a scratchpad chat. Default off."
+            },
+            "logTexts": {
+              "type": "boolean",
+              "description": "Keep the texts of this conversation (original, recognised, translated) for quality review — for debugging only. Default off."
             }
           },
           "required": [

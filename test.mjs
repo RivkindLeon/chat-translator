@@ -538,6 +538,18 @@ console.log("\n— the documented top-level model actually reaches a route —")
   check("a route overrides it", r3.model === "c/d");
 }
 
+
+console.log("\n— text sampling is per conversation, not global —");
+{
+  const { resolveRoutes } = await import("./src/config.js");
+  const rs = resolveRoutes({ routes: [{ jid: "a@g.us", logTexts: true }, { jid: "b@g.us" }] });
+  check("a conversation can be sampled on its own", rs[0].logTexts === true);
+  check("its neighbour is not", rs[1].logTexts === false);
+  const all = resolveRoutes({ logTexts: true, routes: [{ jid: "a@g.us" }, { jid: "b@g.us", logTexts: false }] });
+  check("the global switch still works", all[0].logTexts === true);
+  check("and a conversation can opt out of it", all[1].logTexts === false);
+}
+
 console.log("\n— a second recipient keeps the same contract —");
 {
   const { resolveDelivery, listDeliveries } = await import("./src/delivery/index.js");

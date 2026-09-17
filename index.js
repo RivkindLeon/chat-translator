@@ -95,9 +95,15 @@ export default {
       }
     };
 
-    /** Text samples, so translation quality can be judged rather than guessed. */
-    const sample = async (label, text) => {
-      if (readConfig().logTexts !== true) return;
+    /**
+     * Text samples, so translation quality can be judged rather than guessed.
+     * Off by default, and switchable per route: debugging one conversation
+     * should never start recording everybody else's.
+     */
+    const sample = async (label, text, route) => {
+      const cfg = readConfig();
+      const on = route ? (route.logTexts ?? cfg.logTexts) : cfg.logTexts;
+      if (on !== true) return;
       try {
         await ensureDirs();
         const day = new Date().toISOString().slice(0, 10);
@@ -329,7 +335,7 @@ export default {
               const msg = `[${route.name}] voice transcribed (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? "?"}`;
               log.info?.(`[chat-translator] ${msg}`);
               void journal("info", msg);
-              void sample("voice transcript", text);
+              void sample("voice transcript", text, route);
             }
           } else if (item.mediaKind === "image" && cfg.readImages !== false) {
             // describeImageFile skips the job on its own ("primary model supports vision
@@ -371,7 +377,7 @@ export default {
               const msg = `[${route.name}] text read from image (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? cfg.imageModel ?? "?"}`;
               log.info?.(`[chat-translator] ${msg}`);
               void journal("info", msg);
-              void sample(`image text · ${res?.model ?? cfg.imageModel}`, text);
+              void sample(`image text · ${res?.model ?? cfg.imageModel}`, text, route);
             } else {
               // usually this means the model cannot read images at all
               const miss =
@@ -462,7 +468,8 @@ export default {
 
         void sample(
           `translation · ${route.name} · ${result?.model ?? "?"}`,
-          `--- SOURCE ---\n${renderMessagesForPrompt(textItems)}\n\n--- TRANSLATION ---\n${translated}`
+          `--- SOURCE ---\n${renderMessagesForPrompt(textItems)}\n\n--- TRANSLATION ---\n${translated}`,
+          route
         );
 
         const payload = [translated, ...mediaLines].join("\n\n");

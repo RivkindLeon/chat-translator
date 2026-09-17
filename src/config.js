@@ -39,6 +39,7 @@ export function resolveRoutes(cfg) {
         // your own messages as input. Both are off unless a route asks.
         twoWay: r.twoWay ?? cfg.twoWay ?? false,
         includeOwnMessages: r.includeOwnMessages ?? cfg.includeOwnMessages ?? false,
+        logTexts: r.logTexts ?? cfg.logTexts ?? false,
       }));
   }
 

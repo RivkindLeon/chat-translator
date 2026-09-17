@@ -71,7 +71,9 @@ export function buildTranslationPrompt(route) {
         : "Messages may be in several languages — translate all of them.",
     "",
     "RULES",
-    '- Keep the header line "Name · time" exactly as given; change nothing in it.',
+    route.omitHeaders
+      ? "- There are no header lines. Answer with the translated text and nothing else."
+      : '- Keep the header line "Name · time" exactly as given; change nothing in it.',
     "- Keep the conversational register: render slang as slang, not as officialese.",
     "- Expand an abbreviation only when the meaning would otherwise be lost.",
     "- Never invent or complete anything. A fragment stays a fragment.",
@@ -96,12 +98,16 @@ export function buildTranslationPrompt(route) {
 }
 
 /** Renders a batch of messages as text for the model. */
-export function renderMessagesForPrompt(items) {
+export function renderMessagesForPrompt(items, { omitHeaders = false } = {}) {
   return items
     .map((m) => {
+      const quote = m.replyToBody ? `[re: ${m.replyToBody}]\n` : "";
+      // In a chat you are reading, who said it and when is half the meaning.
+      // In a scratchpad you write into, it is one more thing to delete before
+      // you can forward what you came for.
+      if (omitHeaders) return `${quote}${m.text}`;
       const head = `${m.sender} · ${m.clock}${m.prefix ? ` ${m.prefix}` : ""}`;
-      const quote = m.replyToBody ? `\n[re: ${m.replyToBody}]` : "";
-      return `${head}${quote}\n${m.text}`;
+      return `${head}\n${quote}${m.text}`;
     })
     .join("\n\n");
 }

@@ -591,7 +591,10 @@ console.log("\n— you can check a translation you cannot read —");
   check("the translation was rendered back as well", calls.llm.length === 2);
   check("the check reads only the translation, never the original",
     (calls.llm[1]?.messages?.[0]?.content ?? "") === "TRADUZIDO");
-  check("both went out together", delivered.some((t) => t.includes("TRADUZIDO") && t.includes("↩ what it actually says")));
+  // Two messages, not one: the translation has to stay copyable on its own.
+  check("the translation went out by itself", delivered.some((t) => t === "TRADUZIDO"));
+  check("the check went out as its own message", delivered.some((t) => t === "↩ what it actually says"));
+  check("nothing was glued together", !delivered.some((t) => t.includes("TRADUZIDO") && t.includes("↩")));
 
   // an already-readable answer must not be echoed twice
   calls.llm.length = 0; delivered.length = 0; seen = [];
@@ -618,6 +621,25 @@ console.log("\n— you can check a translation you cannot read —");
   globalThis.fetch = origFetch;
   pluginConfig.routes = pluginConfig.routes.filter((r) => r.jid !== pad);
   pluginConfig.dryRun = true;
+}
+
+
+console.log("\n— a scratchpad translation is copyable as it stands —");
+{
+  const { renderMessagesForPrompt, buildTranslationPrompt } = await import("./src/prompts.js");
+  const items = [{ sender: "Sam", clock: "14:58", text: "hello there", prefix: "🎤" }];
+
+  const withHead = renderMessagesForPrompt(items);
+  check("an ordinary conversation keeps who said it and when", withHead.includes("Sam · 14:58"));
+
+  const plain = renderMessagesForPrompt(items, { omitHeaders: true });
+  check("a scratchpad carries the text alone", plain === "hello there");
+
+  check("and the model is told not to invent a header",
+    buildTranslationPrompt({ targetLanguage: "English", omitHeaders: true })
+      .includes("Answer with the translated text and nothing else"));
+  check("while an ordinary route is told to keep it",
+    buildTranslationPrompt({ targetLanguage: "English" }).includes('Keep the header line'));
 }
 
 console.log("\n— a second recipient keeps the same contract —");

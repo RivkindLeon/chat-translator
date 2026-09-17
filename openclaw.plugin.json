@@ -291,6 +291,10 @@
             "backTranslateLabel": {
               "type": "string",
               "description": "Marker in front of the back-rendered line (default ↩)"
+            },
+            "omitHeaders": {
+              "type": "boolean",
+              "description": "Leave out the \"Name · time\" header, so the translation can be copied and forwarded as it is. For a scratchpad chat. Default off."
             }
           },
           "required": [
@@ -407,6 +411,10 @@
       "backTranslateLabel": {
         "type": "string",
         "description": "Marker in front of the back-rendered line (default ↩)"
+      },
+      "omitHeaders": {
+        "type": "boolean",
+        "description": "Leave out the \"Name · time\" header, so the translation can be copied and forwarded as it is. For a scratchpad chat. Default off."
       }
     }
   },

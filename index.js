@@ -480,9 +480,9 @@ export default {
         }
 
         const contextBlock = w.recentContext.length
-          ? `CONTEXT (already translated messages, earlier in the feed)\n${renderMessagesForPrompt(w.recentContext)}\n\n`
+          ? `CONTEXT (already translated messages, earlier in the feed)\n${renderMessagesForPrompt(w.recentContext, { omitHeaders: route.omitHeaders })}\n\n`
           : "";
-        const userContent = `${contextBlock}${buildBatchHeader(route)}\n${renderMessagesForPrompt(textItems)}`;
+        const userContent = `${contextBlock}${buildBatchHeader(route)}\n${renderMessagesForPrompt(textItems, { omitHeaders: route.omitHeaders })}`;
 
         const result = await completeForRoute({
           route,
@@ -512,13 +512,27 @@ export default {
           route
         );
 
-        const check = route.backTranslate ? await backTranslation(translated, route) : "";
-        const payload = [translated, ...(check ? [check] : []), ...mediaLines].join("\n\n");
+        const payload = [translated, ...mediaLines].join("\n\n");
         try {
           await deliver(payload, route);
         } catch (err) {
           w.undelivered.push(payload);
           void journal("error", `[${route.name}] delivery failed, queued: ${err?.message ?? err}`);
+        }
+
+        // The check goes as a message of its own. Appended to the translation it
+        // would have to be deleted by hand every time before forwarding it on —
+        // and forwarding it on is the entire point of a scratchpad.
+        if (route.backTranslate) {
+          const check = await backTranslation(translated, route);
+          if (check) {
+            try {
+              await deliver(check, route);
+            } catch (err) {
+              w.undelivered.push(check);
+              void journal("error", `[${route.name}] delivery failed, queued: ${err?.message ?? err}`);
+            }
+          }
         }
 
         w.failures = 0;

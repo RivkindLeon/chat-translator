@@ -42,6 +42,7 @@ export function resolveRoutes(cfg) {
         logTexts: r.logTexts ?? cfg.logTexts ?? false,
         backTranslate: r.backTranslate ?? cfg.backTranslate ?? false,
         backTranslateLabel: r.backTranslateLabel ?? cfg.backTranslateLabel,
+        omitHeaders: r.omitHeaders ?? cfg.omitHeaders ?? false,
       }));
   }
 

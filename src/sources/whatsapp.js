@@ -45,7 +45,7 @@ export default {
       try {
         if (debug?.()) {
           log.info?.(
-            `[hebrew-bridge][hook:message_received] channel=${ctx?.channelId} ` +
+            `[chat-translator][hook:message_received] channel=${ctx?.channelId} ` +
             `conv=${ctx?.conversationId} from=${event?.from} len=${(event?.content ?? "").length}`
           );
         }
@@ -80,7 +80,7 @@ export default {
             : { kind: "text", text }),
         });
       } catch (err) {
-        log.error?.(`[hebrew-bridge] handler failed: ${err?.message ?? err}`);
+        log.error?.(`[chat-translator] handler failed: ${err?.message ?? err}`);
         void journal("error", `handler failed: ${err?.message ?? err}`);
       }
     });
@@ -100,10 +100,10 @@ export default {
         if (!blockAgent()) return;
         const key = event?.sessionKey ?? ctx?.sessionKey;
         if (!key || !isWatchedSession(key)) return;
-        log.info?.("[hebrew-bridge] agent run suppressed for a watched conversation");
+        log.info?.("[chat-translator] agent run suppressed for a watched conversation");
         return { handled: true };
       } catch (err) {
-        log.error?.(`[hebrew-bridge] agent guard failed: ${err?.message ?? err}`);
+        log.error?.(`[chat-translator] agent guard failed: ${err?.message ?? err}`);
         void journal("error", `agent guard failed: ${err?.message ?? err}`);
       }
     });
@@ -114,11 +114,11 @@ export default {
         if (!muteOutbound()) return;
         const target = ctx.conversationId ?? event.to ?? "(unknown)";
         const preview = String(event.content ?? "").slice(0, 80).replace(/\s+/g, " ");
-        log.info?.(`[hebrew-bridge] outgoing WhatsApp message cancelled: ${target}`);
+        log.info?.(`[chat-translator] outgoing WhatsApp message cancelled: ${target}`);
         void journal("warn", `cancelled outgoing WhatsApp message → ${target}: "${preview}"`);
-        return { cancel: true, cancelReason: "hebrew-bridge: read-only" };
+        return { cancel: true, cancelReason: "chat-translator: read-only" };
       } catch (err) {
-        log.error?.(`[hebrew-bridge] outbound guard failed: ${err?.message ?? err}`);
+        log.error?.(`[chat-translator] outbound guard failed: ${err?.message ?? err}`);
         void journal("error", `outbound guard failed: ${err?.message ?? err}`);
       }
     });

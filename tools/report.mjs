@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Hebrew Bridge spending report.
+ * Chat Translator spending report.
  *
  *   node report.mjs              — current month
  *   node report.mjs 2026-08      — a specific month
@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 const args = process.argv.slice(2);
 const wantDays = args.includes("--days");
 const periodArg = args.find((a) => !a.startsWith("--")) ?? new Date().toISOString().slice(0, 7);
-const dataDir = process.env.HEBREW_BRIDGE_DIR ?? join(homedir(), ".openclaw", "hebrew-bridge");
+const dataDir = process.env.CHAT_TRANSLATOR_DIR ?? join(homedir(), ".openclaw", "chat-translator");
 const usageFile = join(dataDir, "usage.jsonl");
 
 const money = (v) => `$${v.toFixed(v < 1 ? 4 : 2)}`;
@@ -75,7 +75,7 @@ for (const r of rows) {
 }
 
 const period = periodArg === "all" ? "all time" : periodArg;
-console.log(`\nHebrew Bridge — spending, ${period}\n`);
+console.log(`\nChat Translator — spending, ${period}\n`);
 
 console.log(pad("What", 22) + padL("Calls", 9) + padL("Tokens in", 13) + padL("Tokens out", 13) + padL("Cost", 12));
 console.log("-".repeat(69));

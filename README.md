@@ -1,12 +1,14 @@
-# Hebrew Bridge
+# Chat Translator
 
 An [OpenClaw](https://openclaw.ai) plugin that translates chats written in a
 language you do not read. It watches selected groups in one messenger, translates
 the messages and delivers them to another messenger — each group to its own chat.
 
-It was written for a specific problem: kindergarten parent chats, building chats
-and municipal announcements in Hebrew that the owner cannot read. Hence the shape
-of it: it does not try to be a general-purpose bot, it does one job.
+It was written for a specific problem: living somewhere whose language you have
+not learned, while the chats that actually matter — the parents' group at your
+child's school, the building's residents, the municipality, work — all happen in
+it. Hence the shape of it: it does not try to be a general-purpose bot, it does
+one job.
 
 ## What it does
 
@@ -53,8 +55,8 @@ If translations never arrive, it is almost always 2 or 3.
 ## Install
 
 ```bash
-git clone https://github.com/RivkindLeon/hebrew-bridge ~/projects/hebrew-bridge
-cd ~/projects/hebrew-bridge
+git clone https://github.com/RivkindLeon/chat-translator ~/projects/chat-translator
+cd ~/projects/chat-translator
 ./deploy.sh
 ```
 
@@ -79,7 +81,7 @@ node tools/add-group.mjs <id> "Name" <address>     # connect one
 Set the language once, in the plugin config:
 
 ```json
-{ "targetLanguage": "English", "sourceLanguage": "Hebrew", "ownerName": "Sam" }
+{ "targetLanguage": "English", "sourceLanguage": "Portuguese", "ownerName": "Sam" }
 ```
 
 ## Tools

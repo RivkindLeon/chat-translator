@@ -1,6 +1,8 @@
 {
-  "id": "hebrew-bridge",
-  "name": "Hebrew Bridge",
+  "id": "chat-translator",
+  "name": "Chat Translator",
+  "version": "1.0.0",
+  "categories": ["integrations"],
   "description": "Translates a stream of messages from a watched chat into your language and delivers it over a separate channel.",
   "activation": {
     "onStartup": true
@@ -16,7 +18,7 @@
       },
       "targetLanguage": {
         "type": "string",
-        "description": "Target language, written in English as a hint for the model: Russian, English, German…"
+        "description": "Target language, written in English so the model understands it, e.g. English (this is the default)"
       },
       "model": {
         "type": "string",
@@ -113,7 +115,7 @@
       },
       "dataDir": {
         "type": "string",
-        "description": "Folder for journals and cost accounting (default ~/.openclaw/hebrew-bridge)"
+        "description": "Folder for journals and cost accounting (default ~/.openclaw/chat-translator)"
       },
       "logRetentionDays": {
         "type": "number",
@@ -196,7 +198,7 @@
             },
             "targetLanguage": {
               "type": "string",
-              "description": "Target language, written in English as a hint for the model: Russian, English, German…"
+              "description": "Target language, written in English so the model understands it, e.g. English (this is the default)"
             },
             "glossary": {
               "type": "object",
@@ -227,7 +229,7 @@
             },
             "sourceLanguage": {
               "type": "string",
-              "description": "Language of the source messages, in English: Hebrew, Arabic… (optional)"
+              "description": "Language of the chat you are reading, written in English (optional)"
             },
             "ownerName": {
               "type": "string",
@@ -315,7 +317,7 @@
       },
       "sourceLanguage": {
         "type": "string",
-        "description": "Language of the source messages, in English: Hebrew, Arabic… (optional)"
+        "description": "Language of the chat you are reading, written in English (optional)"
       },
       "ownerName": {
         "type": "string",

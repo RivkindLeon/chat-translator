@@ -1,8 +1,35 @@
 {
-  "name": "openclaw-plugin-hebrew-bridge",
-  "version": "0.1.0",
-  "private": true,
+  "name": "openclaw-plugin-chat-translator",
+  "version": "1.0.0",
   "type": "module",
   "main": "index.js",
-  "description": "OpenClaw plugin: translates a watched chat into your language and forwards it to a destination"
+  "description": "OpenClaw plugin: translates a watched chat into your language and forwards it to a destination",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RivkindLeon/chat-translator.git"
+  },
+  "files": [
+    "index.js",
+    "src",
+    "tools",
+    "openclaw.plugin.json",
+    "README.md",
+    "DOC.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.7.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.7.0"
+    }
+  }
 }

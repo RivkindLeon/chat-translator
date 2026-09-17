@@ -41,7 +41,7 @@ export async function deliverText({ text, route, gatewayConfig, log, journal }) 
         lastErr = err;
         const retriable = err?.retriable === true || RETRIABLE.test(String(err?.message ?? err));
         if (!retriable || attempt === 3) break;
-        log?.warn?.(`[hebrew-bridge] delivery attempt ${attempt} failed (${err?.message ?? err}), retrying`);
+        log?.warn?.(`[chat-translator] delivery attempt ${attempt} failed (${err?.message ?? err}), retrying`);
         void journal?.("warn", `delivery attempt ${attempt} failed, retrying`);
         await new Promise((r) => setTimeout(r, err?.retryAfterMs ?? attempt * 1500));
       }

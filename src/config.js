@@ -1,5 +1,5 @@
 export const DEFAULTS = {
-  targetLanguage: "Russian",
+  targetLanguage: "English",
   debounceMs: 20_000,
   maxWaitMs: 120_000,
   maxBatch: 15,

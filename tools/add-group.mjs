@@ -77,9 +77,9 @@ if (typeof source.prepareChannel === "function") {
 }
 
 // 2) the plugin route
-const entry = (cfg.plugins ??= {}).entries?.["hebrew-bridge"] ?? {};
+const entry = (cfg.plugins ??= {}).entries?.["chat-translator"] ?? {};
 cfg.plugins.entries ??= {};
-cfg.plugins.entries["hebrew-bridge"] = entry;
+cfg.plugins.entries["chat-translator"] = entry;
 entry.config ??= {};
 
 // migrate the legacy settings shape into routes if it is still in use
@@ -130,4 +130,4 @@ try {
 }
 
 console.log("Done. Check back in half a minute:");
-console.log("  tail -3 ~/.openclaw/hebrew-bridge/logs/$(date -u +%F).log");
+console.log("  tail -3 ~/.openclaw/chat-translator/logs/$(date -u +%F).log");

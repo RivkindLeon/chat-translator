@@ -9,7 +9,11 @@ let handler = null;
 const handlers = {};
 let onCalls = 0;
 
-const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/hebrew-bridge-test-${process.pid}`;
+// Non-Latin text must survive the whole pipeline. Symbols rather than any
+// real script: the plugin is not about one language and neither are its tests.
+const NON_ASCII = "✦ ✧ ✶ — “…”";
+
+const TEST_DIR = `${process.env.TMPDIR ?? "/tmp"}/chat-translator-test-${process.pid}`;
 
 const MAIN_JID = "120363000000000000@g.us";
 
@@ -88,12 +92,12 @@ await wait(250);
 check("unrelated messages never reached the model", calls.llm.length === 0);
 
 console.log("\n— deduplication —");
-await wa("שלום", { id: "dup-1" });
-await wa("שלום", { id: "dup-1" });
+await wa("msg-alpha", { id: "dup-1" });
+await wa("msg-alpha", { id: "dup-1" });
 await wait(250);
 check("duplicate messageId dropped", calls.llm.length === 1);
 const firstPrompt = calls.llm[0].messages[0].content;
-check("prompt carries the message once", (firstPrompt.match(/שלום/g) || []).length === 1);
+check("prompt carries the message once", (firstPrompt.match(/msg-alpha/g) || []).length === 1);
 
 console.log("\n— debounce collects a batch —");
 calls.llm.length = 0;
@@ -109,7 +113,7 @@ check("previous batch carried into the context", p2.includes("CONTEXT"));
 check("glossary name substituted", p2.includes("Eitan"));
 check("second participant recognised", p2.includes("Miri"));
 check("system prompt carries the rules", calls.llm[0].systemPrompt.includes("RULES"));
-check("target language substituted", calls.llm[0].systemPrompt.includes(pluginConfig.targetLanguage ?? "Russian"));
+check("target language substituted", calls.llm[0].systemPrompt.includes(pluginConfig.targetLanguage ?? "English"));
 check("plugin does not force a model", calls.llm[0].model === undefined);
 
 console.log("\n— maxBatch caps the batch —");
@@ -257,21 +261,21 @@ console.log("\n— the assistant never runs on watched messages —");
 console.log("\n— voice messages and images —");
 {
   calls.llm.length = 0; calls.stt.length = 0; calls.img.length = 0;
-  sttReply = "שלום, נתראה מחר";
+  sttReply = "transcribed speech, second part";
   await wa("<media:audio>", { id: "v-1", mediaPath: "/tmp/a.ogg", mime: "audio/ogg" });
   await wait(350);
   check("voice message sent for transcription", calls.stt.length === 1);
   check("file path passed through", calls.stt[0]?.filePath === "/tmp/a.ogg");
   const voiced = calls.llm[0]?.messages[0].content ?? "";
-  check("transcript went into the translation", voiced.includes("נתראה מחר"));
+  check("transcript went into the translation", voiced.includes("second part"));
   check("marked as a voice message", voiced.includes("🎤"));
 
   calls.llm.length = 0; calls.img.length = 0;
-  imgReply = "הודעה חשובה להורים";
+  imgReply = "text lifted off the image";
   await wa("<media:image>", { id: "i-1", mediaPath: "/tmp/x.jpg", mime: "image/jpeg" });
   await wait(350);
   check("image sent for reading", calls.img.length === 1);
-  check("text from the image went into the translation", (calls.llm[0]?.messages[0].content ?? "").includes("הודעה חשובה"));
+  check("text from the image went into the translation", (calls.llm[0]?.messages[0].content ?? "").includes("lifted off the image"));
 
   calls.llm.length = 0;
   imgReply = "NO_TEXT";
@@ -302,7 +306,7 @@ console.log("\n— a network failure loses nothing and never re-translates —")
     delivered.push(JSON.parse(init.body).text);
     return { ok: true, text: async () => "" };
   };
-  await wa("סבבה", { id: "net-1" });
+  await wa("net-payload", { id: "net-1" });
   await wait(6500);
   check("translation requested once despite the failures", calls.llm.length === 1);
   check("message delivered in the end", delivered.length === 1);
@@ -322,11 +326,11 @@ console.log("\n— an empty answer from the model must not swallow the batch —
     return { text: "[batch translation]", model: par.model, usage: {} };
   };
 
-  await wa("הודעה חשובה", { id: "empty-1" });
+  await wa("important-message", { id: "empty-1" });
   await wait(900);
 
   check("the batch was translated again, not dropped", calls.llm.length === 2);
-  check("the original message survived", (calls.llm[1]?.messages[0].content ?? "").includes("הודעה חשובה"));
+  check("the original message survived", (calls.llm[1]?.messages[0].content ?? "").includes("lifted off the image"));
   api.runtime.llm.complete = realComplete;
 }
 
@@ -342,7 +346,7 @@ console.log("\n— an undelivered translation leaves without waiting for new mes
     return { ok: true, text: async () => "" };
   };
 
-  await wa("ערב טוב", { id: "queue-1" });
+  await wa("queued-message", { id: "queue-1" });
   await wait(500);
   check("the failed delivery went into the queue", delivered.length === 0);
 
@@ -454,9 +458,9 @@ console.log("\n— a second recipient keeps the same contract —");
   const origFetch = globalThis.fetch;
   let sent;
   globalThis.fetch = async (url, init) => { sent = { url, body: JSON.parse(init.body) }; return { ok: true }; };
-  await hook.sendChunk({ target: "https://example.com/hook", text: "שלום" });
+  await hook.sendChunk({ target: "https://example.com/hook", text: NON_ASCII });
   check("the route address is the URL itself", sent.url === "https://example.com/hook");
-  check("Slack and Discord field names both go out", sent.body.text === "שלום" && sent.body.content === "שלום");
+  check("Slack and Discord field names both go out", sent.body.text === NON_ASCII && sent.body.content === NON_ASCII);
 
   let refused;
   try { await hook.sendChunk({ target: "http://insecure.example", text: "x" }); } catch (err) { refused = err; }

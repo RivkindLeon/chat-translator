@@ -1,4 +1,4 @@
-# Hebrew Bridge
+# Chat Translator
 
 A translator for chats you cannot read. It watches selected groups in one
 messenger, translates the messages and sends them on to another messenger —
@@ -59,7 +59,7 @@ on the very first translation, before the switch to the subscription.
 ## Commands
 
 All of them run on the server, in the plugin directory
-`~/.openclaw/extensions/hebrew-bridge/`.
+`~/.openclaw/extensions/chat-translator/`.
 
 ```bash
 node groups.mjs        # which groups the server has seen, with message fragments
@@ -69,8 +69,8 @@ node report.mjs        # spending for the month (2026-09 · all · --days)
 node test.mjs          # 53 logic checks
 ```
 
-Journal: `~/.openclaw/hebrew-bridge/logs/YYYY-MM-DD.log`
-Call accounting: `~/.openclaw/hebrew-bridge/usage.jsonl`
+Journal: `~/.openclaw/chat-translator/logs/YYYY-MM-DD.log`
+Call accounting: `~/.openclaw/chat-translator/usage.jsonl`
 
 ---
 
@@ -96,7 +96,7 @@ it. The depth is limited by the gateway journal, which only lives two days.
 ## Settings
 
 They live in `~/.openclaw/openclaw.json`, section
-`plugins.entries.hebrew-bridge.config`.
+`plugins.entries.chat-translator.config`.
 
 | Option | Meaning |
 |---|---|
@@ -132,8 +132,8 @@ plus `OPENCLAW_EXTENSIONS`, `OPENCLAW_SERVICE`, `OPENCLAW_RESTART_CMD` and
 
 ## Where it stands
 
-The plugin started out written for a single case: WhatsApp in, Telegram out,
-Russian hardcoded into the model prompts. Those assumptions have since been
+The plugin started out written for a single case: WhatsApp in, Telegram out, and
+one language pair baked into the model prompts. Those assumptions have since been
 lifted:
 
 1. **Any source** — a “source” layer instead of a hard binding to WhatsApp. The

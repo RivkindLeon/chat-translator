@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 const execFileAsync = promisify(execFile);
 
 /**
- * Hebrew Bridge — an OpenClaw plugin.
+ * Chat Translator — an OpenClaw plugin.
  *
  * Reads chosen conversations, accumulates messages into batches, translates a
  * batch with a single model call and delivers the result elsewhere.
@@ -36,8 +36,8 @@ let registered = false;
 let teardown = null;
 
 export default {
-  id: "hebrew-bridge",
-  name: "Hebrew Bridge",
+  id: "chat-translator",
+  name: "Chat Translator",
   description: "Translates a watched chat into your language and forwards it to a destination",
 
   /**
@@ -53,8 +53,8 @@ export default {
   register(api) {
     if (registered) {
       try {
-        api.runtime.logging.getChildLogger({ plugin: "hebrew-bridge" })
-          .warn?.("[hebrew-bridge] register() called twice in one process — ignoring the second call");
+        api.runtime.logging.getChildLogger({ plugin: "chat-translator" })
+          .warn?.("[chat-translator] register() called twice in one process — ignoring the second call");
       } catch { /* logging is optional */ }
       return;
     }
@@ -66,13 +66,13 @@ export default {
 
     let log;
     try {
-      log = api.runtime.logging.getChildLogger({ plugin: "hebrew-bridge" });
+      log = api.runtime.logging.getChildLogger({ plugin: "chat-translator" });
     } catch {
       log = console;
     }
 
     const dataDir = () =>
-      readConfig().dataDir ?? join(homedir(), ".openclaw", "hebrew-bridge");
+      readConfig().dataDir ?? join(homedir(), ".openclaw", "chat-translator");
 
     let dirsReady = false;
     const ensureDirs = async () => {
@@ -272,7 +272,7 @@ export default {
         void journal("error", `could not set the message aside: ${writeErr?.message ?? writeErr}`);
       }
       const msg = `[${route.name}] delivery permanently rejected, message set aside in undeliverable.jsonl: ${String(err?.message ?? err).slice(0, 120)}`;
-      log.error?.(`[hebrew-bridge] ${msg}`);
+      log.error?.(`[chat-translator] ${msg}`);
       void journal("error", msg);
     };
 
@@ -285,7 +285,7 @@ export default {
     async function deliver(text, route) {
       const cfg = readConfig();
       if (cfg.dryRun) {
-        log.info?.(`[hebrew-bridge] dry run, delivery skipped:\n${text}`);
+        log.info?.(`[chat-translator] dry run, delivery skipped:\n${text}`);
         return;
       }
       await deliverText({ text, route, gatewayConfig: readGatewayConfig(), log, journal });
@@ -327,7 +327,7 @@ export default {
               item.text = text;
               item.prefix = "🎤";
               const msg = `[${route.name}] voice transcribed (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? "?"}`;
-              log.info?.(`[hebrew-bridge] ${msg}`);
+              log.info?.(`[chat-translator] ${msg}`);
               void journal("info", msg);
               void sample("voice transcript", text);
             }
@@ -369,7 +369,7 @@ export default {
               item.text = text;
               item.prefix = "📷";
               const msg = `[${route.name}] text read from image (${text.length} chars), provider=${res?.provider ?? "?"} model=${res?.model ?? cfg.imageModel ?? "?"}`;
-              log.info?.(`[hebrew-bridge] ${msg}`);
+              log.info?.(`[chat-translator] ${msg}`);
               void journal("info", msg);
               void sample(`image text · ${res?.model ?? cfg.imageModel}`, text);
             } else {
@@ -377,14 +377,14 @@ export default {
               const miss =
                 `[${route.name}] no text read from image: reply="${String(res?.text ?? "").slice(0, 60)}" ` +
                 `provider=${res?.provider ?? "?"} model=${res?.model ?? cfg.imageModel ?? "?"}`;
-              log.warn?.(`[hebrew-bridge] ${miss}`);
+              log.warn?.(`[chat-translator] ${miss}`);
               void journal("warn", miss);
             }
           }
         } catch (err) {
           // if it fails, the plain marker remains and nothing is lost
           const msg = `[${route.name}] ${item.mediaKind}: processing failed (${err?.message ?? err})`;
-          log.warn?.(`[hebrew-bridge] ${msg}`);
+          log.warn?.(`[chat-translator] ${msg}`);
           void journal("warn", msg);
         }
       }
@@ -446,7 +446,7 @@ export default {
           messages: [{ role: "user", content: userContent }],
           maxTokens: 2000,
           temperature: 0.2,
-          purpose: `hebrew-bridge: batch translation (${route.name})`,
+          purpose: `chat-translator: batch translation (${route.name})`,
         });
 
         const translated = (result?.text ?? "").trim();
@@ -485,7 +485,7 @@ export default {
           `[${route.name}] translated ${textItems.length} message(s) (+${mediaItems.length} attachment notes), ` +
           `model ${result?.model ?? "?"}, tokens in=${inTok ?? "?"} out=${outTok ?? "?"}` +
           (cost !== undefined ? `, ≈$${cost.toFixed(6)}` : "");
-        log.info?.(`[hebrew-bridge] ${summary}`);
+        log.info?.(`[chat-translator] ${summary}`);
         void journal("info", summary);
         void recordUsage({
           kind: "translate",
@@ -501,7 +501,7 @@ export default {
       } catch (err) {
         w.pending.unshift(...batch);
         w.failures += 1;
-        log.error?.(`[hebrew-bridge] [${route.name}] translation failed: ${err?.message ?? err}`);
+        log.error?.(`[chat-translator] [${route.name}] translation failed: ${err?.message ?? err}`);
         void journal("error", `[${route.name}] translation failed: ${err?.message ?? err}`);
       } finally {
         w.flushing = false;
@@ -567,7 +567,7 @@ export default {
           w.pending.push({ ...base, kind: "media", mediaKind: msg.mediaKind, mediaPath: msg.mediaPath, mime: msg.mime, text: "" });
           if (!msg.mediaPath) {
             const miss = `[${route.name}] attachment without a file path (${msg.mediaKind})`;
-            log.warn?.(`[hebrew-bridge] ${miss}`);
+            log.warn?.(`[chat-translator] ${miss}`);
             void journal("warn", miss);
           } else {
             void journal("info", `[${route.name}] media received ${msg.mediaKind}: ${msg.mediaPath}`);
@@ -579,7 +579,7 @@ export default {
         scheduleFlush(route);
         scheduleSave();
       } catch (err) {
-        log.error?.(`[hebrew-bridge] intake failed: ${err?.message ?? err}`);
+        log.error?.(`[chat-translator] intake failed: ${err?.message ?? err}`);
         void journal("error", `intake failed: ${err?.message ?? err}`);
       }
     }
@@ -621,10 +621,10 @@ export default {
       for (const name of ["inbound_claim", "before_dispatch", "reply_dispatch", "message_sending", "message_sent", "session_start"]) {
         try {
           api.on(name, async (event, ctx) => {
-            log.info?.(`[hebrew-bridge][hook:${name}] channel=${ctx?.channelId ?? "-"} conv=${ctx?.conversationId ?? "-"} from=${event?.from ?? "-"}`);
+            log.info?.(`[chat-translator][hook:${name}] channel=${ctx?.channelId ?? "-"} conv=${ctx?.conversationId ?? "-"} from=${event?.from ?? "-"}`);
           });
         } catch (err) {
-          log.warn?.(`[hebrew-bridge] hook ${name} unavailable: ${err?.message ?? err}`);
+          log.warn?.(`[chat-translator] hook ${name} unavailable: ${err?.message ?? err}`);
         }
       }
     }
@@ -660,14 +660,14 @@ export default {
                   prompt: buildImageTextPrompt(probeRoute),
                 });
             log.info?.(
-              `[hebrew-bridge][self-test] ${attempt.label}: ` +
+              `[chat-translator][self-test] ${attempt.label}: ` +
               `text=${JSON.stringify(String(res?.text ?? "").slice(0, 120))} ` +
               `provider=${res?.provider ?? "-"} model=${res?.model ?? "-"} ` +
               `decision=${JSON.stringify(res?.decision ?? null).slice(0, 300)} ` +
               `output=${JSON.stringify(res?.output ?? null).slice(0, 200)}`
             );
           } catch (err) {
-            log.warn?.(`[hebrew-bridge][self-test] ${attempt.label}: exception ${err?.message ?? err}`);
+            log.warn?.(`[chat-translator][self-test] ${attempt.label}: exception ${err?.message ?? err}`);
           }
         }
       }, 8000));
@@ -953,6 +953,6 @@ export default {
       for (const w of worlds.values()) clearTimers(w);
     };
 
-    log.info?.("[hebrew-bridge] plugin registered");
+    log.info?.("[chat-translator] plugin registered");
   },
 };

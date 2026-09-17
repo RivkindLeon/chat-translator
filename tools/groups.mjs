@@ -20,8 +20,8 @@ try {
   cfg = JSON.parse(await readFile(CONFIG, "utf8"));
 } catch { /* the config may be unreadable */ }
 
-const pluginCfg = cfg?.plugins?.entries?.["hebrew-bridge"]?.config ?? {};
-const dataDir = pluginCfg.dataDir ?? join(homedir(), ".openclaw", "hebrew-bridge");
+const pluginCfg = cfg?.plugins?.entries?.["chat-translator"]?.config ?? {};
+const dataDir = pluginCfg.dataDir ?? join(homedir(), ".openclaw", "chat-translator");
 
 const connected = new Map();
 for (const r of pluginCfg.routes ?? []) if (r?.jid) connected.set(r.jid, r.name ?? "connected");

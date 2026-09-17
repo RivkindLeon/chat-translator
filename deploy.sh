@@ -19,7 +19,7 @@ GATEWAY_URL="${OPENCLAW_GATEWAY_URL:-http://127.0.0.1:18789/}"
 GATEWAY_LOGS="${OPENCLAW_LOG_DIR:-/tmp/openclaw}"
 CLI="${OPENCLAW_CLI:-$(command -v openclaw || echo "$HOME/npm-global/bin/openclaw")}"
 
-DEST="$EXTENSIONS/hebrew-bridge"
+DEST="$EXTENSIONS/chat-translator"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 BACKUP="$(mktemp -d)"
 
@@ -56,7 +56,7 @@ cp "$SRC"/tools/*.mjs "$DEST/"
 # mean this deploy broke something. Without this baseline any earlier failure
 # in the same day's log would trigger a rollback of a perfectly good deploy.
 LOG="$GATEWAY_LOGS/openclaw-$(date -u +%F).log"
-FAILURE="hebrew-bridge failed to load\|hebrew-bridge invalid config"
+FAILURE="chat-translator failed to load\|chat-translator invalid config"
 ERRORS_BEFORE="$(grep -c "$FAILURE" "$LOG" 2>/dev/null || true)"
 ERRORS_BEFORE="${ERRORS_BEFORE:-0}"
 echo "  load errors in the log before deploy: $ERRORS_BEFORE"
@@ -80,5 +80,5 @@ if [ "$ERRORS_AFTER" -gt "$ERRORS_BEFORE" ]; then
 fi
 
 echo "  routes:"
-"$CLI" plugins inspect hebrew-bridge 2>/dev/null | grep -E "^Status" | sed 's/^/    /'
-tail -1 "$HOME/.openclaw/hebrew-bridge/logs/$(date -u +%F).log" 2>/dev/null | sed 's/^/    /'
+"$CLI" plugins inspect chat-translator 2>/dev/null | grep -E "^Status" | sed 's/^/    /'
+tail -1 "$HOME/.openclaw/chat-translator/logs/$(date -u +%F).log" 2>/dev/null | sed 's/^/    /'

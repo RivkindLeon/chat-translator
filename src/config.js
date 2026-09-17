@@ -40,6 +40,8 @@ export function resolveRoutes(cfg) {
         twoWay: r.twoWay ?? cfg.twoWay ?? false,
         includeOwnMessages: r.includeOwnMessages ?? cfg.includeOwnMessages ?? false,
         logTexts: r.logTexts ?? cfg.logTexts ?? false,
+        backTranslate: r.backTranslate ?? cfg.backTranslate ?? false,
+        backTranslateLabel: r.backTranslateLabel ?? cfg.backTranslateLabel,
       }));
   }
 

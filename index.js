@@ -20,7 +20,7 @@ const execFileAsync = promisify(execFile);
 
 import { DEFAULTS, resolveRoutes } from "./src/config.js";
 import { DEFAULT_PRICES, estimateCostUsd, normalizeModelKey } from "./src/pricing.js";
-import { buildBatchHeader, buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt } from "./src/prompts.js";
+import { buildBackTranslationPrompt, buildBatchHeader, buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt } from "./src/prompts.js";
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
 import { resolveSource, listSources } from "./src/sources/index.js";
@@ -396,6 +396,46 @@ export default {
       }
     }
 
+    /**
+     * Renders a translation back into the language the reader actually knows,
+     * so they can check it before forwarding it on. Never fatal: if it fails,
+     * the translation still goes out — losing a message to a nicety would be
+     * the wrong trade.
+     */
+    async function backTranslation(text, route) {
+      try {
+        const res = await completeForRoute({
+          route,
+          api,
+          gatewayConfig: readGatewayConfig(),
+          systemPrompt: buildBackTranslationPrompt(route),
+          messages: [{ role: "user", content: text }],
+          maxTokens: 1000,
+          temperature: 0,
+          purpose: `chat-translator: back-translation (${route.name})`,
+        });
+        const back = (res?.text ?? "").trim();
+        if (!back || /^SAME$/i.test(back)) return "";
+
+        const u = res?.usage ?? {};
+        void recordUsage({
+          kind: "backtranslate",
+          route: route.name,
+          provider: res?.provider,
+          model: res?.model,
+          inputTokens: u.inputTokens ?? u.promptTokens ?? null,
+          outputTokens: u.outputTokens ?? u.completionTokens ?? null,
+          costUsd: estimateCostUsd(res?.model, u.inputTokens ?? u.promptTokens, u.outputTokens ?? u.completionTokens, readConfig().prices) ?? null,
+          chars: back.length,
+          ok: true,
+        });
+        return `${route.backTranslateLabel ?? "↩"} ${back}`;
+      } catch (err) {
+        void journal("warn", `[${route.name}] back-translation failed, sending the translation as is: ${err?.message ?? err}`);
+        return "";
+      }
+    }
+
     async function flush(route) {
       const w = worldOf(route.jid);
       if (w.flushing) return;
@@ -472,7 +512,8 @@ export default {
           route
         );
 
-        const payload = [translated, ...mediaLines].join("\n\n");
+        const check = route.backTranslate ? await backTranslation(translated, route) : "";
+        const payload = [translated, ...(check ? [check] : []), ...mediaLines].join("\n\n");
         try {
           await deliver(payload, route);
         } catch (err) {

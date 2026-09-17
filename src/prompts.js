@@ -117,3 +117,24 @@ export function buildBatchHeader(route = {}) {
   if (!(route.twoWay && source)) return "TRANSLATE THESE MESSAGES";
   return `TRANSLATE EACH MESSAGE INTO THE OTHER LANGUAGE (${source} → ${target}, ${target} → ${source})`;
 }
+
+/**
+ * Checking a translation you cannot read.
+ *
+ * The point of a scratchpad is to send a message in a language you do not
+ * speak — which means you cannot tell whether what you are about to send says
+ * what you meant. So the translation is rendered back into the language you do
+ * read, and you compare that with what you wrote.
+ *
+ * It is deliberately a separate call on the translated text alone: the model
+ * never sees the original, so it cannot quietly "correct" the rendering to
+ * match what it knows you meant.
+ */
+export function buildBackTranslationPrompt(route = {}) {
+  const target = route.targetLanguage;
+  return [
+    `Render the text below in ${target}, plainly and faithfully, so a reader can check what it actually says.`,
+    `If the text is already in ${target}, reply with exactly: SAME`,
+    "Do not explain, do not comment, do not improve the wording. The rendering only.",
+  ].join("\n");
+}

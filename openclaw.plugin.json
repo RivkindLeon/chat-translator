@@ -283,6 +283,14 @@
             "logTexts": {
               "type": "boolean",
               "description": "Keep the texts of this conversation (original, recognised, translated) for quality review — for debugging only. Default off."
+            },
+            "backTranslate": {
+              "type": "boolean",
+              "description": "Also render the translation back into targetLanguage, so you can check a message before forwarding it on. One extra model call. Default off."
+            },
+            "backTranslateLabel": {
+              "type": "string",
+              "description": "Marker in front of the back-rendered line (default ↩)"
             }
           },
           "required": [
@@ -391,6 +399,14 @@
       "includeOwnMessages": {
         "type": "boolean",
         "description": "Also translate the messages you send yourself in this conversation — only useful for a scratchpad chat. Default off."
+      },
+      "backTranslate": {
+        "type": "boolean",
+        "description": "Also render the translation back into targetLanguage, so you can check a message before forwarding it on. One extra model call. Default off."
+      },
+      "backTranslateLabel": {
+        "type": "string",
+        "description": "Marker in front of the back-rendered line (default ↩)"
       }
     }
   },

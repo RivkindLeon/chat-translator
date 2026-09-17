@@ -550,6 +550,65 @@ console.log("\n— text sampling is per conversation, not global —");
   check("and a conversation can opt out of it", all[1].logTexts === false);
 }
 
+
+console.log("\n— you can check a translation you cannot read —");
+{
+  const pad = "120363666666666666@g.us";
+  pluginConfig.dryRun = false;
+  pluginConfig.routes.push({
+    jid: pad, name: "Check", chatId: "888",
+    sourceLanguage: "Portuguese", targetLanguage: "English",
+    twoWay: true, includeOwnMessages: true, backTranslate: true,
+  });
+
+  const realComplete = api.runtime.llm.complete;
+  const delivered = [];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { delivered.push(JSON.parse(init.body).text); return { ok: true, text: async () => "" }; };
+
+  let seen = [];
+  api.runtime.llm.complete = async (par) => {
+    calls.llm.push(par); seen.push(par.systemPrompt);
+    // first call translates, second renders it back
+    return { text: seen.length === 1 ? "TRADUZIDO" : "what it actually says", model: "m", usage: {} };
+  };
+
+  calls.llm.length = 0;
+  await wa("check-me", { id: "bt-1", jid: pad, metadata: { fromMe: true } });
+  await wait(600);
+
+  check("the translation was rendered back as well", calls.llm.length === 2);
+  check("the check reads only the translation, never the original",
+    (calls.llm[1]?.messages?.[0]?.content ?? "") === "TRADUZIDO");
+  check("both went out together", delivered.some((t) => t.includes("TRADUZIDO") && t.includes("↩ what it actually says")));
+
+  // an already-readable answer must not be echoed twice
+  calls.llm.length = 0; delivered.length = 0; seen = [];
+  api.runtime.llm.complete = async (par) => {
+    calls.llm.push(par); seen.push(par.systemPrompt);
+    return { text: seen.length === 1 ? "already English" : "SAME", model: "m", usage: {} };
+  };
+  await wa("check-me-2", { id: "bt-2", jid: pad, metadata: { fromMe: true } });
+  await wait(600);
+  check("SAME adds nothing", delivered.some((t) => t === "already English"));
+
+  // and a failure must never cost us the translation
+  calls.llm.length = 0; delivered.length = 0; seen = [];
+  api.runtime.llm.complete = async (par) => {
+    seen.push(1);
+    if (seen.length > 1) throw new Error("model is down");
+    return { text: "TRADUZIDO2", model: "m", usage: {} };
+  };
+  await wa("check-me-3", { id: "bt-3", jid: pad, metadata: { fromMe: true } });
+  await wait(600);
+  check("a failed check still delivers the translation", delivered.some((t) => t.includes("TRADUZIDO2")));
+
+  api.runtime.llm.complete = realComplete;
+  globalThis.fetch = origFetch;
+  pluginConfig.routes = pluginConfig.routes.filter((r) => r.jid !== pad);
+  pluginConfig.dryRun = true;
+}
+
 console.log("\n— a second recipient keeps the same contract —");
 {
   const { resolveDelivery, listDeliveries } = await import("./src/delivery/index.js");

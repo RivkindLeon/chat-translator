@@ -41,7 +41,12 @@ export async function completeForRoute({ route, api, gatewayConfig, systemPrompt
 
   let hostError;
   try {
-    return await api.runtime.llm.complete({ ...ask, model: route.model });
+    const hosted = await api.runtime.llm.complete({ ...ask, model: route.model });
+    // An empty completion is how the host declines a model it will not run:
+    // it answers, it just answers with nothing. Treating that as a result is
+    // how a route ends up retrying for ever against a model that never replies.
+    if ((hosted?.text ?? "").trim()) return hosted;
+    hostError = new Error("the host accepted the request but returned nothing for this model");
   } catch (err) {
     hostError = err;
   }

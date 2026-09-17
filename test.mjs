@@ -196,7 +196,18 @@ console.log("\n— per-route model —");
   check("a named model is asked of OpenClaw first", calls.llm.length === 1);
   check("and it is told which one", calls.llm[0].model === "openai/gpt-5.5");
 
-  // Only when the host refuses do we pay a provider ourselves.
+  // A host that answers with nothing is refusing, not succeeding — otherwise a
+  // route retries for ever against a model that never replies.
+  api.runtime.llm.complete = async () => ({ text: "   ", model: "m", usage: {} });
+  const origFetch0 = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: "from the provider" } }], model: "m", usage: {} }) });
+  const viaFallback = await completeForRoute({
+    route: { name: "empty host", model: "openrouter/some/model" }, api, messages: [],
+  });
+  globalThis.fetch = origFetch0;
+  check("an empty answer from the host falls through to the provider", viaFallback.text === "from the provider");
+
+  // Only when the host refuses outright do we pay a provider ourselves.
   api.runtime.llm.complete = async () => { throw new Error("model override is not allowed"); };
   calls.auth.length = 0;
   const sent = [];

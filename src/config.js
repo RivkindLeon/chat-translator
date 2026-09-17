@@ -34,6 +34,10 @@ export function resolveRoutes(cfg) {
         maxWaitMs: r.maxWaitMs ?? cfg.maxWaitMs ?? DEFAULTS.maxWaitMs,
         maxBatch: r.maxBatch ?? cfg.maxBatch ?? DEFAULTS.maxBatch,
         contextSize: r.contextSize ?? cfg.contextSize ?? DEFAULTS.contextSize,
+        // A scratchpad conversation translates in both directions and counts
+        // your own messages as input. Both are off unless a route asks.
+        twoWay: r.twoWay ?? cfg.twoWay ?? false,
+        includeOwnMessages: r.includeOwnMessages ?? cfg.includeOwnMessages ?? false,
       }));
   }
 

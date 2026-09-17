@@ -37,10 +37,11 @@ export default {
    *
    * @param api        the OpenClaw plugin object
    * @param isWatched  (conversationId) => boolean — do we read this conversation
+   * @param wantsOwnMessages (conversationId) => boolean — does it also want ours
    * @param onMessage  (msg) => void — a normalised message
    * @param log,journal,debug — output
    */
-  attach({ api, isWatched, onMessage, log, journal, debug }) {
+  attach({ api, isWatched, wantsOwnMessages, onMessage, log, journal, debug }) {
     api.on("message_received", async (event, ctx) => {
       try {
         if (debug?.()) {
@@ -54,8 +55,9 @@ export default {
         const conversationId = ctx.conversationId ?? event.from ?? "";
         if (!isWatched(conversationId)) return;
 
-        // no point translating our own messages
-        if (event.metadata?.fromMe === true) return;
+        // In a chat we only read, our own messages are noise. In a scratchpad
+        // conversation they are the whole point — that is what gets forwarded there.
+        if (event.metadata?.fromMe === true && !wantsOwnMessages?.(conversationId)) return;
 
         const text = (event.content ?? "").trim();
         if (!text) return;

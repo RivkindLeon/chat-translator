@@ -48,29 +48,41 @@ export function buildTranslationPrompt(route) {
   const source = route.sourceLanguage;
   const owner = route.ownerName;
 
+  // A scratchpad conversation goes both ways: what arrives in the source
+  // language comes back in the target one, and what you write in the target
+  // language comes back in the source one, ready to forward on. It needs both
+  // ends of the pair to be named — without that there is no "other" language.
+  const twoWay = Boolean(route.twoWay && source);
+  // Rules that name a language have to stay honest in both directions.
+  const into = twoWay ? "the language that message is being translated into" : target;
+
   const glossaryLines = Object.entries(route.glossary ?? {})
     .map(([from, to]) => `  ${from} → ${to}`)
     .join("\n");
 
   return [
-    `You translate a stream of group-chat messages into ${target}.`,
-    source
-      ? `Messages are usually in ${source}, but other languages may appear — translate those too.`
-      : "Messages may be in several languages — translate all of them.",
+    twoWay
+      ? `You translate messages between ${source} and ${target}, in both directions.`
+      : `You translate a stream of group-chat messages into ${target}.`,
+    twoWay
+      ? `Translate each message into the other language of the pair: ${source} → ${target}, and ${target} → ${source}. Anything in a third language goes into ${target}.`
+      : source
+        ? `Messages are usually in ${source}, but other languages may appear — translate those too.`
+        : "Messages may be in several languages — translate all of them.",
     "",
     "RULES",
     '- Keep the header line "Name · time" exactly as given; change nothing in it.',
     "- Keep the conversational register: render slang as slang, not as officialese.",
     "- Expand an abbreviation only when the meaning would otherwise be lost.",
     "- Never invent or complete anything. A fragment stays a fragment.",
-    `- Mark a reply on its own line, written in ${target}: "↪ in reply to: <short gist>".`,
+    `- Mark a reply on its own line, written in ${into}: "↪ in reply to: <short gist>".`,
     owner
       ? `- If a message is addressed to ${owner} personally or asks something of them, start that line with "⚑".`
       : "",
     "- Answer with the translation only. No preamble, no explanations, no comments of your own.",
     "- Preserve the structure exactly: line breaks, indentation, grouping by day or section.",
     "  Do not merge lines and do not reorder anything.",
-    `- Keep names of people, places and local realities recognisable: transliterate into ${target}`,
+    `- Keep names of people, places and local realities recognisable: transliterate into ${into}`,
     "  when there is no established equivalent, rather than inventing a translation.",
     glossaryLines
       ? `\nGLOSSARY (write these names and terms exactly so)\n${glossaryLines}`

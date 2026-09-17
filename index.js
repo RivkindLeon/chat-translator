@@ -599,6 +599,8 @@ export default {
         source.attach({
           api,
           isWatched: (conversationId) => watchedJids().has(conversationId),
+          wantsOwnMessages: (conversationId) =>
+            resolveRoutes(readConfig()).some((r) => r.jid === conversationId && r.includeOwnMessages),
           onMessage: handleIncoming,
           log,
           journal,
@@ -782,6 +784,13 @@ export default {
         `plugin started · routes: ${rs.length}` +
         (rs.length ? " · " + rs.map((r) => `${r.name} → ${r.chatId ?? "?"}${r.threadId ? `#${r.threadId}` : ""}`).join(", ") : "")
       );
+    }
+    // twoWay without a source language silently degrades to one-way, and a
+    // silent degradation is exactly what this plugin keeps getting bitten by.
+    for (const r of resolveRoutes(readConfig())) {
+      if (r.twoWay && !r.sourceLanguage) {
+        void journal("warn", `[${r.name}] twoWay needs sourceLanguage to know the other direction — translating one way only`);
+      }
     }
     /**
      * Catch up on what was missed: take the conversation's messages from the gateway

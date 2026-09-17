@@ -446,6 +446,51 @@ console.log("\n— the source adapter owns its channel setup —");
 }
 
 
+
+console.log("\n— a scratchpad conversation translates both ways —");
+{
+  const pad = "120363555555555555@g.us";
+  pluginConfig.routes.push({
+    jid: pad, name: "Scratchpad", chatId: "777",
+    sourceLanguage: "Portuguese", targetLanguage: "English",
+    twoWay: true, includeOwnMessages: true,
+  });
+  calls.llm.length = 0;
+
+  // the whole point of this conversation: what WE forward into it
+  await wa("forwarded-by-me", { id: "pad-1", jid: pad, metadata: { fromMe: true } });
+  await wait(400);
+  check("our own message is translated here", calls.llm.length === 1);
+  check("and it is the one we sent", (calls.llm[0]?.messages[0].content ?? "").includes("forwarded-by-me"));
+
+  const prompt = calls.llm[0]?.systemPrompt ?? "";
+  check("the prompt asks for both directions", prompt.includes("in both directions"));
+  check("both ends of the pair are named", prompt.includes("Portuguese → English") && prompt.includes("English → Portuguese"));
+
+  // …and the conversations that only get read must not have changed at all
+  calls.llm.length = 0;
+  await wa("still-ignored", { id: "pad-2", metadata: { fromMe: true } });
+  await wait(400);
+  check("an ordinary conversation still ignores our own messages", calls.llm.length === 0);
+
+  calls.llm.length = 0;
+  await wa("plain-message", { id: "pad-3" });
+  await wait(400);
+  const plain = calls.llm[0]?.systemPrompt ?? "";
+  check("an ordinary conversation is still one-way", !plain.includes("in both directions"));
+  check("and still translates into its target language", plain.includes("into English"));
+
+  pluginConfig.routes = pluginConfig.routes.filter((r) => r.jid !== pad);
+}
+
+console.log("\n— two-way without a source language does not fail silently —");
+{
+  const { buildTranslationPrompt } = await import("./src/prompts.js");
+  const half = buildTranslationPrompt({ twoWay: true, targetLanguage: "English" });
+  check("it falls back to one-way rather than inventing a pair", !half.includes("in both directions"));
+  check("and still translates into the target", half.includes("into English"));
+}
+
 console.log("\n— a second recipient keeps the same contract —");
 {
   const { resolveDelivery, listDeliveries } = await import("./src/delivery/index.js");

@@ -2,7 +2,9 @@
   "id": "chat-translator",
   "name": "Chat Translator",
   "version": "1.0.0",
-  "categories": ["integrations"],
+  "categories": [
+    "integrations"
+  ],
   "description": "Translates a stream of messages from a watched chat into your language and delivers it over a separate channel.",
   "activation": {
     "onStartup": true
@@ -269,6 +271,14 @@
             "model": {
               "type": "string",
               "description": "A dedicated model for this route, as provider/model (e.g. openrouter/google/gemini-3.7-flash). Without it the agent model is used."
+            },
+            "twoWay": {
+              "type": "boolean",
+              "description": "Translate in both directions between sourceLanguage and targetLanguage — for a scratchpad chat you forward messages into. Needs sourceLanguage. Default off."
+            },
+            "includeOwnMessages": {
+              "type": "boolean",
+              "description": "Also translate the messages you send yourself in this conversation — only useful for a scratchpad chat. Default off."
             }
           },
           "required": [
@@ -369,6 +379,14 @@
       "routeModel": {
         "type": "string",
         "description": "Default model for every route (provider/model)"
+      },
+      "twoWay": {
+        "type": "boolean",
+        "description": "Translate in both directions between sourceLanguage and targetLanguage — for a scratchpad chat you forward messages into. Needs sourceLanguage. Default off."
+      },
+      "includeOwnMessages": {
+        "type": "boolean",
+        "description": "Also translate the messages you send yourself in this conversation — only useful for a scratchpad chat. Default off."
       }
     }
   },

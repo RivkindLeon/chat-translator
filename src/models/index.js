@@ -15,14 +15,21 @@ export function listProviders() {
  * Asks the model assigned to a route for a translation.
  *
  * With no explicit model it goes through OpenClaw, which picks whatever the
- * agent is configured with. With an explicit model the plugin calls the
- * provider itself — there is no other way, since OpenClaw refuses to let a
- * plugin override the model.
+ * agent is configured with.
+ *
+ * With an explicit model there are two ways in, and the order matters. The host
+ * is asked first: it is the only path that can reach subscription credentials
+ * (a ChatGPT Plus login and the like), which a plugin has no way to use on its
+ * own. That needs one line of operator consent in the config:
+ *
+ *   plugins.entries.<plugin-id>.llm.allowModelOverride: true
+ *
+ * Only if the host refuses do we call the provider ourselves with an API key —
+ * which works for the handful of providers listed above, and costs money.
  */
 export async function completeForRoute({ route, api, gatewayConfig, systemPrompt, messages, maxTokens, temperature, purpose }) {
-  if (!route.model) {
-    return api.runtime.llm.complete({ systemPrompt, messages, maxTokens, temperature, purpose });
-  }
+  const ask = { systemPrompt, messages, maxTokens, temperature, purpose };
+  if (!route.model) return api.runtime.llm.complete(ask);
 
   const slash = route.model.indexOf("/");
   if (slash < 1) {
@@ -30,11 +37,20 @@ export async function completeForRoute({ route, api, gatewayConfig, systemPrompt
   }
   const providerId = route.model.slice(0, slash);
   const modelId = route.model.slice(slash + 1);
-
   const provider = resolveProvider(providerId);
+
+  let hostError;
+  try {
+    return await api.runtime.llm.complete({ ...ask, model: route.model });
+  } catch (err) {
+    hostError = err;
+  }
+
   if (!provider) {
     throw new Error(
-      `the plugin cannot call provider "${providerId}"; available: ${listProviders().join(", ")}`
+      `the plugin cannot call provider "${providerId}" itself, and OpenClaw would not use that model ` +
+      `(${String(hostError?.message ?? hostError).slice(0, 120)}). ` +
+      `Set plugins.entries.<plugin-id>.llm.allowModelOverride: true, or pick a provider the plugin can call directly: ${listProviders().join(", ")}`
     );
   }
 

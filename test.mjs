@@ -182,11 +182,22 @@ console.log("\n— conversation registry —");
 console.log("\n— per-route model —");
 {
   const { completeForRoute } = await import("./src/models/index.js");
+  const realComplete = api.runtime.llm.complete;
 
   calls.llm.length = 0;
   await completeForRoute({ route: { name: "no model" }, api, systemPrompt: "s", messages: [] });
   check("without a model we go through OpenClaw", calls.llm.length === 1);
+  check("and no model is forced on it", calls.llm[0].model === undefined);
 
+  // A named model goes to the host first: that is the only path that can reach
+  // a subscription login, which the plugin cannot use on its own.
+  calls.llm.length = 0;
+  await completeForRoute({ route: { name: "host model", model: "openai/gpt-5.5" }, api, systemPrompt: "s", messages: [] });
+  check("a named model is asked of OpenClaw first", calls.llm.length === 1);
+  check("and it is told which one", calls.llm[0].model === "openai/gpt-5.5");
+
+  // Only when the host refuses do we pay a provider ourselves.
+  api.runtime.llm.complete = async () => { throw new Error("model override is not allowed"); };
   calls.auth.length = 0;
   const sent = [];
   const origFetch = globalThis.fetch;
@@ -205,11 +216,17 @@ console.log("\n— per-route model —");
   check("translation received directly", res.text === "translated");
   check("usage accounted", res.usage.inputTokens === 10 && res.usage.outputTokens === 5);
 
+  // A provider we cannot call, refused by the host too: the error has to say
+  // what the operator can actually do about it.
   let failed;
   try {
     await completeForRoute({ route: { name: "broken", model: "nosuch/model" }, api, messages: [] });
   } catch (err) { failed = err; }
-  check("unknown provider yields a clear error", /cannot call provider/.test(String(failed?.message)));
+  const msg = String(failed?.message);
+  check("an unusable model yields a clear error", /cannot call provider/.test(msg));
+  check("and the error names the way out", /allowModelOverride/.test(msg));
+
+  api.runtime.llm.complete = realComplete;
 }
 
 console.log("\n— every chat gets its own world —");

@@ -508,7 +508,7 @@ export default {
 
         void sample(
           `translation · ${route.name} · ${result?.model ?? "?"}`,
-          `--- SOURCE ---\n${renderMessagesForPrompt(textItems)}\n\n--- TRANSLATION ---\n${translated}`,
+          `--- SOURCE ---\n${renderMessagesForPrompt(textItems, { omitHeaders: route.omitHeaders })}\n\n--- TRANSLATION ---\n${translated}`,
           route
         );
 

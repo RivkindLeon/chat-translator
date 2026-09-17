@@ -491,6 +491,36 @@ console.log("\n— two-way without a source language does not fail silently —"
   check("and still translates into the target", half.includes("into English"));
 }
 
+
+console.log("\n— two-way instruction survives next to the messages —");
+{
+  const { buildBatchHeader, buildTranslationPrompt } = await import("./src/prompts.js");
+  const pad = { twoWay: true, sourceLanguage: "Portuguese", targetLanguage: "English" };
+
+  check("a plain route keeps the header it always had",
+    buildBatchHeader({ targetLanguage: "English" }) === "TRANSLATE THESE MESSAGES");
+  const head = buildBatchHeader(pad);
+  check("a scratchpad repeats the direction above the batch",
+    head.includes("Portuguese → English") && head.includes("English → Portuguese"));
+
+  const sys = buildTranslationPrompt(pad);
+  check("and is told never to hand a message back untouched",
+    sys.includes("Never return a message in the language it arrived in"));
+  check("a plain route is not told that", !buildTranslationPrompt({ targetLanguage: "English" })
+    .includes("Never return a message in the language it arrived in"));
+}
+
+console.log("\n— the documented top-level model actually reaches a route —");
+{
+  const { resolveRoutes } = await import("./src/config.js");
+  const [r] = resolveRoutes({ model: "openrouter/some/model", routes: [{ jid: "x@g.us" }] });
+  check("top-level model is used", r.model === "openrouter/some/model");
+  const [r2] = resolveRoutes({ routeModel: "openrouter/old/spelling", routes: [{ jid: "x@g.us" }] });
+  check("the older spelling still works", r2.model === "openrouter/old/spelling");
+  const [r3] = resolveRoutes({ model: "a/b", routes: [{ jid: "x@g.us", model: "c/d" }] });
+  check("a route overrides it", r3.model === "c/d");
+}
+
 console.log("\n— a second recipient keeps the same contract —");
 {
   const { resolveDelivery, listDeliveries } = await import("./src/delivery/index.js");

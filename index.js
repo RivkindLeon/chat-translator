@@ -20,7 +20,7 @@ const execFileAsync = promisify(execFile);
 
 import { DEFAULTS, resolveRoutes } from "./src/config.js";
 import { DEFAULT_PRICES, estimateCostUsd, normalizeModelKey } from "./src/pricing.js";
-import { buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt } from "./src/prompts.js";
+import { buildBatchHeader, buildImageTextPrompt, buildTranslationPrompt, renderMessagesForPrompt } from "./src/prompts.js";
 import { MEDIA_LABELS, MEDIA_PLURAL, renderMediaNotes, extractMediaFile } from "./src/media.js";
 import { splitForDelivery, formatClock, resolveSenderLabel } from "./src/format.js";
 import { resolveSource, listSources } from "./src/sources/index.js";
@@ -436,7 +436,7 @@ export default {
         const contextBlock = w.recentContext.length
           ? `CONTEXT (already translated messages, earlier in the feed)\n${renderMessagesForPrompt(w.recentContext)}\n\n`
           : "";
-        const userContent = `${contextBlock}TRANSLATE THESE MESSAGES\n${renderMessagesForPrompt(textItems)}`;
+        const userContent = `${contextBlock}${buildBatchHeader(route)}\n${renderMessagesForPrompt(textItems)}`;
 
         const result = await completeForRoute({
           route,

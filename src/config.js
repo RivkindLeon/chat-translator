@@ -18,7 +18,8 @@ export function resolveRoutes(cfg) {
         jid: r.jid,
         source: r.source ?? cfg.source ?? "whatsapp",
         delivery: r.delivery ?? cfg.delivery ?? "telegram",
-        model: r.model ?? cfg.routeModel,
+        // `model` is what the manifest documents; `routeModel` is the older spelling
+        model: r.model ?? cfg.model ?? cfg.routeModel,
         name: r.name ?? `conversation ${i + 1}`,
         chatId: r.chatId ?? cfg.telegramChatId,
         threadId: r.threadId,

@@ -79,6 +79,9 @@ export function buildTranslationPrompt(route) {
     owner
       ? `- If a message is addressed to ${owner} personally or asks something of them, start that line with "⚑".`
       : "",
+    twoWay
+      ? `- Never return a message in the language it arrived in. A ${source} message comes back in ${target}, a ${target} message comes back in ${source} — even when it already reads perfectly well.`
+      : "",
     "- Answer with the translation only. No preamble, no explanations, no comments of your own.",
     "- Preserve the structure exactly: line breaks, indentation, grouping by day or section.",
     "  Do not merge lines and do not reorder anything.",
@@ -101,4 +104,16 @@ export function renderMessagesForPrompt(items) {
       return `${head}${quote}\n${m.text}`;
     })
     .join("\n\n");
+}
+
+/**
+ * The line that introduces the batch itself. In a two-way conversation the
+ * instruction is repeated here on purpose: it sits directly above the messages,
+ * where the model is least likely to lose it behind the context block.
+ */
+export function buildBatchHeader(route = {}) {
+  const target = route.targetLanguage;
+  const source = route.sourceLanguage;
+  if (!(route.twoWay && source)) return "TRANSLATE THESE MESSAGES";
+  return `TRANSLATE EACH MESSAGE INTO THE OTHER LANGUAGE (${source} → ${target}, ${target} → ${source})`;
 }

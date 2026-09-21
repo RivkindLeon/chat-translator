@@ -1,9 +1,9 @@
 {
   "name": "openclaw-plugin-chat-translator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "index.js",
-  "description": "OpenClaw plugin: translates a watched chat into your language and forwards it to a destination",
+  "description": "OpenClaw plugin. Translate WhatsApp group chats into a language you actually read and forward them to Telegram or a webhook — text, voice messages and photos.",
   "license": "MIT",
   "repository": {
     "type": "git",

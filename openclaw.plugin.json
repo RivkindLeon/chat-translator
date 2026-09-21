@@ -1,9 +1,11 @@
 {
   "id": "chat-translator",
   "name": "Chat Translator",
-  "version": "1.0.0",
-  "categories": ["integrations"],
-  "description": "Translates a stream of messages from a watched chat into your language and delivers it over a separate channel.",
+  "version": "1.0.1",
+  "categories": [
+    "integrations"
+  ],
+  "description": "Translate WhatsApp group chats into a language you actually read and forward them to Telegram or a webhook — text, voice messages and photos.",
   "activation": {
     "onStartup": true
   },

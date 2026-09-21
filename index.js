@@ -711,7 +711,11 @@ export default {
       // gateway.request is off limits for third-party plugins, so ask through the CLI
       let raw;
       try {
-        const cli = cfg.cliPath ?? process.env.OPENCLAW_CLI ?? join(homedir(), "npm-global", "bin", "openclaw");
+        // OPENCLAW_CLI is also used by the host as a plain flag ("1"), so only
+        // take it when it actually looks like a path to something.
+        const fromEnv = process.env.OPENCLAW_CLI;
+        const envPath = fromEnv && fromEnv.includes("/") ? fromEnv : undefined;
+        const cli = cfg.cliPath ?? envPath ?? join(homedir(), "npm-global", "bin", "openclaw");
         const res = await execFileAsync(cli, ["models", "status"], {
           timeout: 120_000,
           maxBuffer: 8 * 1024 * 1024,

@@ -414,7 +414,7 @@ export default {
           gatewayConfig: readGatewayConfig(),
           systemPrompt: buildBackTranslationPrompt(route),
           messages: [{ role: "user", content: text }],
-          maxTokens: 1000,
+          maxTokens: 4000,  // see the batch translation below: thinking models spend from the same budget
           temperature: 0,
           purpose: `chat-translator: back-translation (${route.name})`,
         });
@@ -494,7 +494,9 @@ export default {
           gatewayConfig: readGatewayConfig(),
           systemPrompt: buildTranslationPrompt(route),
           messages: [{ role: "user", content: userContent }],
-          maxTokens: 2000,
+          // Thinking models (Gemini Flash, GPT) spend from this budget before they
+          // write a word: at 2000 a two-minute voice note came back cut in half.
+          maxTokens: 8000,
           temperature: 0.2,
           purpose: `chat-translator: batch translation (${route.name})`,
         });

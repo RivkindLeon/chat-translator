@@ -46,6 +46,7 @@ const api = {
     config: { current: () => ({ channels: { telegram: { botToken: "fake" } } }) },
     stt: { transcribeAudioFile: async (p) => { calls.stt.push(p); return { text: sttReply }; } },
     mediaUnderstanding: {
+      transcribeAudioFile: async (p) => { calls.stt.push(p); return { text: sttReply }; },
       describeImageFile: async (p) => { calls.img.push(p); return { text: imgReply }; },
       describeImageFileWithModel: async (p) => { calls.img.push(p); return { text: imgReply }; },
     },
@@ -67,6 +68,7 @@ const wa = (text, opts = {}) => handler(
     timestamp: 1787856471,
     sessionKey: opts.sessionKey,
     replyToBody: opts.replyToBody,
+    ...(opts.media ? { media: opts.media } : {}),
     metadata: opts.metadata ?? {
       pushName: opts.push,
       ...(opts.mediaPath ? { mediaPath: opts.mediaPath, mediaType: opts.mime } : {}),
@@ -298,6 +300,16 @@ console.log("\n— voice messages and images —");
   check("transcript went into the translation", voiced.includes("second part"));
   check("marked as a voice message", voiced.includes("🎤"));
 
+  calls.llm.length = 0; calls.stt.length = 0;
+  await wa("[WhatsApp Main voice note]", {
+    id: "v-event-media",
+    media: [{ path: "/tmp/new-shape.ogg", contentType: "audio/ogg; codecs=opus", kind: "audio" }],
+  });
+  await wait(350);
+  check("new event.media format is recognized as audio", calls.stt.length === 1);
+  check("new event.media path reaches transcription", calls.stt[0]?.filePath === "/tmp/new-shape.ogg");
+  check("new event.media transcript reaches translation", (calls.llm[0]?.messages[0].content ?? "").includes("second part"));
+
   calls.llm.length = 0; calls.img.length = 0;
   imgReply = "text lifted off the image";
   await wa("<media:image>", { id: "i-1", mediaPath: "/tmp/x.jpg", mime: "image/jpeg" });
@@ -312,13 +324,13 @@ console.log("\n— voice messages and images —");
   check("a textless photo never reaches the model", calls.llm.length === 0);
 
   calls.llm.length = 0;
-  const brokenStt = api.runtime.stt.transcribeAudioFile;
-  api.runtime.stt.transcribeAudioFile = async () => { throw new Error("stt unavailable"); };
+  const brokenStt = api.runtime.mediaUnderstanding.transcribeAudioFile;
+  api.runtime.mediaUnderstanding.transcribeAudioFile = async () => { throw new Error("stt unavailable"); };
   await wa("<media:audio>", { id: "v-2", mediaPath: "/tmp/b.ogg" });
   await wait(350);
   check("a transcription failure does not lose the message", calls.log.some(([, m]) => String(m).includes("voice message")));
   check("failure reason recorded", calls.log.some(([lvl, m]) => lvl === "warn" && String(m).includes("stt unavailable")));
-  api.runtime.stt.transcribeAudioFile = brokenStt;
+  api.runtime.mediaUnderstanding.transcribeAudioFile = brokenStt;
   sttReply = "";
 }
 
@@ -384,6 +396,51 @@ console.log("\n— an undelivered translation leaves without waiting for new mes
 
   globalThis.fetch = origFetch;
   pluginConfig.dryRun = true;
+}
+
+console.log("\n— a text the model will not translate does not hold up the group —");
+{
+  pluginConfig.dryRun = false;
+  const delivered = [];
+  const origFetch = globalThis.fetch;
+  const realComplete = api.runtime.llm.complete;
+  let empties = 0;
+  api.runtime.llm.complete = async (par) => {
+    calls.llm.push(par);
+    if (JSON.stringify(par.messages ?? "").includes("hard-to-translate")) { empties += 1; return { text: "", model: par.model, usage: {} }; }
+    return { text: "TRANSLATED-AFTER", model: par.model, usage: {} };
+  };
+  globalThis.fetch = async (url, init) => { delivered.push(JSON.parse(init.body).text); return { ok: true, text: async () => "" }; };
+  // a group of its own: the main one may still be draining the previous test
+  const EMPTY_JID = "120363000000000777@g.us";
+  pluginConfig.routes.push({ jid: EMPTY_JID, name: "Empty", chatId: "777" });
+
+  await wa("hard-to-translate", { id: "empty-1", jid: EMPTY_JID });
+  await wait(2500);
+  await wa("ordinary", { id: "empty-2", jid: EMPTY_JID });
+  await wait(800);
+
+  check("the model is asked a few times, not for ever", empties === 3);
+  check("then the original goes out, marked", delivered.some((t) => t.includes("hard-to-translate") && /could not translate/.test(t)));
+  check("the next message is translated as usual", delivered.some((t) => t.includes("TRANSLATED-AFTER")));
+
+  pluginConfig.routes.pop();
+  api.runtime.llm.complete = realComplete;
+  globalThis.fetch = origFetch;
+  pluginConfig.dryRun = true;
+}
+
+console.log("\n— transcription on an older OpenClaw (runtime.stt) —");
+{
+  const modern = api.runtime.mediaUnderstanding.transcribeAudioFile;
+  delete api.runtime.mediaUnderstanding.transcribeAudioFile;
+  calls.stt.length = 0;
+  sttReply = "old host speech";
+  await wa("<media:audio>", { id: "old-stt-1", media: [{ path: "/tmp/old.ogg", contentType: "audio/ogg", kind: "audio" }] });
+  await wait(600);
+  check("falls back to runtime.stt", calls.stt.length === 1 && calls.stt[0]?.filePath === "/tmp/old.ogg");
+  api.runtime.mediaUnderstanding.transcribeAudioFile = modern;
+  sttReply = "";
 }
 
 console.log("\n— a permanently rejected message does not wedge the queue —");

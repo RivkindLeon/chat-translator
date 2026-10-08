@@ -308,7 +308,11 @@ export default {
 
         try {
           if (item.mediaKind === "audio" && cfg.transcribeVoice !== false) {
-            const res = await api.runtime.stt.transcribeAudioFile({
+            // OpenClaw 2026.9 moved file transcription to runtime.mediaUnderstanding;
+            // runtime.stt is what older hosts still have.
+            const transcribe = api.runtime.mediaUnderstanding?.transcribeAudioFile ?? api.runtime.stt?.transcribeAudioFile;
+            if (!transcribe) throw new Error("this OpenClaw offers no audio transcription to plugins");
+            const res = await transcribe({
               filePath: item.mediaPath,
               cfg: gatewayCfg,
               ...(item.mime ? { mime: item.mime } : {}),
@@ -500,9 +504,31 @@ export default {
           // The batch was already cut out of the queue. Without putting it back
           // the messages are gone for good — and an empty answer is routine
           // (a max_tokens cut-off, a refusal, a content filter).
-          w.pending.unshift(...batch);
-          w.failures += 1;
-          void journal("warn", `[${route.name}] the model returned nothing, batch put back (attempt ${w.failures})`);
+          w.emptyAnswers = (w.emptyAnswers ?? 0) + 1;
+          if (w.emptyAnswers < MAX_EMPTY_ANSWERS) {
+            w.pending.unshift(...batch);
+            w.failures += 1;
+            void journal("warn", `[${route.name}] the model returned nothing, batch put back (attempt ${w.emptyAnswers})`);
+            return;
+          }
+          // But an empty answer that repeats is about this text, not about the
+          // moment: retried for ever it holds back everything written after it
+          // (one message held a group for seven hours). The reader gets the
+          // original, marked, and the queue moves on.
+          const note = route.labels?.untranslated ?? "⚠️ could not translate — original:";
+          const original = renderMessagesForPrompt(textItems, { omitHeaders: route.omitHeaders });
+          const payload = [`${note}\n\n${original}`, ...mediaLines].join("\n\n");
+          try {
+            await deliver(payload, route);
+          } catch (err) {
+            w.undelivered.push(payload);
+            void journal("error", `[${route.name}] delivery failed, queued: ${err?.message ?? err}`);
+          }
+          void journal("warn", `[${route.name}] the model returned nothing ${w.emptyAnswers} times — sent ${textItems.length} message(s) untranslated`);
+          w.emptyAnswers = 0;
+          w.failures = 0;
+          // Not added to the context: whatever made the model go silent would
+          // ride along into the next batches and silence them too.
           return;
         }
 
@@ -536,6 +562,7 @@ export default {
         }
 
         w.failures = 0;
+        w.emptyAnswers = 0;
         w.recentContext.push(...batch);
         while (w.recentContext.length > route.contextSize) w.recentContext.shift();
 
@@ -573,6 +600,7 @@ export default {
     }
 
     const MAX_RETRY_DELAY_MS = 30 * 60_000;
+    const MAX_EMPTY_ANSWERS = 3;  // empty answers in a row before the originals go out as they are
 
     /**
      * Normally the batch leaves after a pause in the conversation. After a

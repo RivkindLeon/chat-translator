@@ -301,7 +301,7 @@ console.log("\n— voice messages and images —");
   check("marked as a voice message", voiced.includes("🎤"));
 
   calls.llm.length = 0; calls.stt.length = 0;
-  await wa("[WhatsApp Main voice note]", {
+  await wa("[WhatsApp 120363000000000000@g.us +2m Thu 2026-10-08 19:12:41 UTC] Some Name (+972500000009):", {
     id: "v-event-media",
     media: [{ path: "/tmp/new-shape.ogg", contentType: "audio/ogg; codecs=opus", kind: "audio" }],
   });
@@ -396,6 +396,32 @@ console.log("\n— an undelivered translation leaves without waiting for new mes
 
   globalThis.fetch = origFetch;
   pluginConfig.dryRun = true;
+}
+
+console.log("\n— photos and videos as OpenClaw 2026.9 hands them over —");
+{
+  calls.llm.length = 0;
+  const env = "[WhatsApp 120363000000000000@g.us +4h Thu 2026-10-08 11:56:50 UTC] Some Name (+972500000009):";
+  const photo = [{ path: "/tmp/env-photo.jpg", contentType: "image/jpeg", kind: "image" }];
+  const realRead = pluginConfig.readImages;
+  pluginConfig.readImages = false;
+
+  await wa(env, { id: "env-1", media: photo });
+  await wait(600);
+  check("a photo without a caption never reaches the model", calls.llm.length === 0);
+
+  await wa(`${env} caption-under-the-photo`, { id: "env-2", media: photo });
+  await wait(600);
+  const sent = JSON.stringify(calls.llm.map((c) => c.messages));
+  check("the caption is translated", sent.includes("caption-under-the-photo"));
+  check("the envelope is not", !sent.includes("[WhatsApp") && !sent.includes("972500000009"));
+  check("the caption says what it was under", sent.includes("📷"));
+
+  calls.llm.length = 0;
+  await wa("[WhatsApp is a fine app] — said nobody", { id: "env-3" });
+  await wait(600);
+  check("ordinary text that merely starts with a bracket is left alone", JSON.stringify(calls.llm.map((c) => c.messages)).includes("said nobody"));
+  pluginConfig.readImages = realRead;
 }
 
 console.log("\n— a text the model will not translate does not hold up the group —");

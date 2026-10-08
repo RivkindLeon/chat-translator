@@ -665,7 +665,11 @@ export default {
             void journal("info", `[${route.name}] media received ${msg.mediaKind}: ${msg.mediaPath}`);
           }
         } else {
-          w.pending.push({ ...base, kind: "text", text: msg.text });
+          // a caption keeps a hint of what it was written under
+          const icon = msg.captionOf
+            ? (route.labelsPlural?.[msg.captionOf]?.icon ?? MEDIA_PLURAL[msg.captionOf]?.icon ?? "📎")
+            : undefined;
+          w.pending.push({ ...base, kind: "text", text: msg.text, ...(icon ? { prefix: icon } : {}) });
         }
 
         scheduleFlush(route);

@@ -10,6 +10,9 @@ import { extractMediaFile } from "../media.js";
  * subscribe to this channel's incoming messages, what its attachments look
  * like, and how to forbid writing into it.
  */
+/** The line OpenClaw 2026.9 puts in front of a media message instead of a placeholder. */
+const ENVELOPE = /^\[WhatsApp [^\]\n]*\][^\n:]*:\s*/;
+
 export default {
   id: "whatsapp",
   channelId: "whatsapp",
@@ -62,11 +65,18 @@ export default {
         const text = (event.content ?? "").trim();
         if (!text) return;
 
-        // the channel substitutes a placeholder like <media:image> for the payload
-        const media = /^<media:([a-z]+)>$/i.exec(text);
+        // OpenClaw 2026.9 hands a photo or a video over as an envelope line —
+        // "[WhatsApp <group> +4h Thu 2026-10-08 11:56:50 UTC] Name (+972…):" —
+        // with the caption, if there is one, after it. Nobody wrote the envelope:
+        // translated, it reached the family as a sender's phone number.
+        const body = text.replace(ENVELOPE, "").trim();
+        // older hosts substitute a placeholder like <media:image> for the payload
+        const media = /^<media:([a-z]+)>\s*/i.exec(body);
+        const caption = media ? body.slice(media[0].length).trim() : body;
         const attachment = extractMediaFile(event);
         const mimeKind = /^(audio|image|video)\//i.exec(attachment.mime ?? "")?.[1]?.toLowerCase();
         const mediaKind = media?.[1]?.toLowerCase() ?? attachment.kind ?? mimeKind;
+        if (!mediaKind && !caption) return;
 
         onMessage({
           conversationId,
@@ -79,9 +89,13 @@ export default {
             event.metadata?.senderName ??
             event.metadata?.notifyName,
           replyToBody: event.replyToBody,
-          ...(mediaKind
+          // A caption is what the sender wrote — it gets translated; the
+          // attachment without one becomes a short note ("📷 3 photos").
+          // A voice note never has a caption, so whatever text came with it is
+          // envelope we failed to recognise — it must not shadow the recording.
+          ...(mediaKind && (!caption || mediaKind === "audio")
             ? { kind: "media", mediaKind, mediaPath: attachment.path, mime: attachment.mime }
-            : { kind: "text", text }),
+            : { kind: "text", text: caption, ...(mediaKind ? { captionOf: mediaKind } : {}) }),
         });
       } catch (err) {
         log.error?.(`[chat-translator] handler failed: ${err?.message ?? err}`);

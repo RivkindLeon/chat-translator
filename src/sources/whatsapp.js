@@ -64,7 +64,9 @@ export default {
 
         // the channel substitutes a placeholder like <media:image> for the payload
         const media = /^<media:([a-z]+)>$/i.exec(text);
-        const attachment = media ? extractMediaFile(event) : {};
+        const attachment = extractMediaFile(event);
+        const mimeKind = /^(audio|image|video)\//i.exec(attachment.mime ?? "")?.[1]?.toLowerCase();
+        const mediaKind = media?.[1]?.toLowerCase() ?? attachment.kind ?? mimeKind;
 
         onMessage({
           conversationId,
@@ -77,8 +79,8 @@ export default {
             event.metadata?.senderName ??
             event.metadata?.notifyName,
           replyToBody: event.replyToBody,
-          ...(media
-            ? { kind: "media", mediaKind: media[1].toLowerCase(), mediaPath: attachment.path, mime: attachment.mime }
+          ...(mediaKind
+            ? { kind: "media", mediaKind, mediaPath: attachment.path, mime: attachment.mime }
             : { kind: "text", text }),
         });
       } catch (err) {

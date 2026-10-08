@@ -46,10 +46,16 @@ export function renderMediaNotes(items, labels = {}, plurals = {}) {
 /** The channel downloads the file itself; the path arrives in metadata under varying keys. */
 export function extractMediaFile(event) {
   const m = event.metadata ?? {};
-  const first = Array.isArray(m.media) ? m.media[0] ?? {} : {};
-  const path = [m.mediaPath, m.filePath, m.path, first.path, first.filePath, m.attachment?.path]
+  // Newer OpenClaw message hooks expose staged attachments as event.media;
+  // older channel adapters put the same facts under metadata.
+  const first = (Array.isArray(event.media) ? event.media[0] : undefined) ??
+    (Array.isArray(event.originalMedia) ? event.originalMedia[0] : undefined) ??
+    (Array.isArray(m.media) ? m.media[0] : undefined) ?? {};
+  const path = [first.path, first.filePath, m.mediaPath, m.filePath, m.path, m.attachment?.path]
     .find((v) => typeof v === "string" && v.length > 0);
-  const mime = [m.mediaType, m.mime, m.mimeType, first.mime, first.mimeType]
+  const mime = [first.contentType, first.mime, first.mimeType, m.mediaType, m.mime, m.mimeType]
     .find((v) => typeof v === "string" && v.length > 0);
-  return { path, mime };
+  const kind = [first.kind, m.mediaKind]
+    .find((v) => typeof v === "string" && v.length > 0);
+  return { path, mime, kind };
 }
